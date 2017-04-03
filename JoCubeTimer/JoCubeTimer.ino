@@ -1,5 +1,5 @@
 #include <Wire.h> 
-#include <LiquidCrystal_I2C.h>
+#include <LiquidCrystal.h>
 
 
 #define START1_BEEP_TIME 7000
@@ -19,7 +19,7 @@
 // in welchem Status sind wir?
 enum State {BEREIT, START1, ANSCHAUEN, PIEP, START2, LOESEN, ANZEIGE, ZUSPAET} state = BEREIT;
 
-LiquidCrystal_I2C lcd(0x3F,16,4);  // set the LCD address to 0x27 for a 16 chars and 2 line display
+LiquidCrystal_I2C lcd(0x3F,16,4);  // set the LCD address to 0x3f for a 16 chars and 2 line display
 
 // welche Kontakte zu den Tastern
 int taster1pin = 2;
