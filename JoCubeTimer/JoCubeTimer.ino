@@ -7,7 +7,7 @@
 #define OKPAD    A2
 #define RIGHTPAD A3
 
-#define BLOCKTIME 150
+#define BLOCKTIME 250
 
 
 #define START1_BEEP_TIME 7000
@@ -39,8 +39,6 @@ DS3231  rtc(SDA, SCL);
 
 unsigned long beepAnschauen;
 unsigned long endeAnschauen;
-unsigned long lastLeft = 0;
-unsigned long lastRight = 0;
 
 unsigned long startLoesen = 0;
 unsigned long anzeigeLoesen = 0;
@@ -167,11 +165,11 @@ int limit = 20;
 int limitOK = 20;
 
 int actionl = 0;
-byte statel = 0;
+byte statel = 1;
 unsigned long blockedl = 0;
 
 int actionr = 0;
-byte stater = 0;
+byte stater = 1;
 unsigned long blockedr = 0;
 
 void setup() {
@@ -253,57 +251,47 @@ int raisedr = 0;
 
 void loop() {
   unsigned long now = millis();
-  
+  actionl = 0;
+  actionr = 0;
   if(now > blockedl){
     int val = ADCTouch.read(LEFTPAD,40);
-    int valuel = (val > refl);
+    int valuel = (val < refl);
     if(valuel != statel){
       actionl = 1;
       blockedl = now + BLOCKTIME;
-      if(valuel > 0 && statel == 0){
+      if(valuel == 0 && statel > 0){
         raisedl++;
       }
       statel = valuel;
     }
+    /*
     lcd.setCursor(0,1);lcd.print(valuel);
     lcd.setCursor(0,2);lcd.print(raisedl);
     lcd.setCursor(0,3);lcd.print(val);
+    // */
   }
   if(now > blockedr){
     int val = ADCTouch.read(RIGHTPAD,40);
-    int valuer = (val > refr);
+    int valuer = (val < refr);
     if(valuer != stater){
       actionr = 1;
       blockedr = now + BLOCKTIME;
-      if(valuer > 0){
+      if(valuer == 0){
         raisedr++;
       }
       stater = valuer;
     }
+    /*
     lcd.setCursor(8,1);lcd.print(valuer);
     lcd.setCursor(8,2);lcd.print(raisedr);
     lcd.setCursor(8,3);lcd.print(val);
+    // */
   }
 
-  
-  //lcd.setCursor(0,1);lcd.print(valuel>refl);
-  //lcd.setCursor(8,1);lcd.print(valuer>refr);
 
-  delay(10);
-
-  /*
-   * //unsigned long after = millis();
-  //lcd.setCursor(1,1);lcd.print(after-now);
-  // int valueOK = ADCTouch.read(OKPAD,100) < refOK;
-  if(! valuel){
-    lastLeft = now;
+  if(actionl || actionr){
+    evalPins(statel, stater);
   }
-  if(! valuer){
-    lastRight = now;
-  }
-
-  evalPins(valuel, valuer);
-
   if (stateChanged) {
     printState(state);
     if (state == ANZEIGE) {
@@ -348,5 +336,5 @@ void loop() {
     lastTime = now;
     showTime();
   }
-  */
+//  */
 }
