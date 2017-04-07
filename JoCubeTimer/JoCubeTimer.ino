@@ -7,8 +7,9 @@
 #define OKPAD    A2
 #define RIGHTPAD A3
 
-#define BLOCKTIME 250
+#define SETTINGSWITCH A0
 
+#define BLOCKTIME 250
 
 #define START1_BEEP_TIME 7000
 #define START1_END_TIME 10000
@@ -25,8 +26,15 @@
 #define AKTUALISIEREN 100
 
 #define SPEAKERPIN A10
+
+#define BESTLENGTH 11
+
+unsigned long bestenListe[BESTLENGTH] = {0};
+
+byte platz = 0;
+
 // in welchem Status sind wir?
-enum State {BEREIT, START1, ANSCHAUEN, PIEP, START2, LOESEN, ANZEIGE, ZUSPAET} state = BEREIT;
+enum State {BEREIT, START1, ANSCHAUEN, PIEP, START2, LOESEN, ANZEIGE, ZUSPAET, LOESCHEN} state = BEREIT;
 
 int refl, refr, refOK;     //reference values to remove offset
 
@@ -46,46 +54,40 @@ unsigned long loeseZeit = 0;
 
 unsigned long sperrZeit = 0;
 
-const char startloesen[] = {'S', 't', 'a', 'r', 't', ' ', 'L', 239, 's', 'e', 'n', 0};
-const char loesen[] = {'l', 239, 's', 'e', 'n', 0};
-const char geloest[] = {'G', 'e', 'l', 239, 's', 't', ':', ' ', 0};
+const char startloesenstring[] = {'S', 't', 'a', 'r', 't', ' ', 'L', 239, 's', 'e', 'n', ' ',0};
+const char loesen[] = {'l', 239, 's', 'e', 'n', ' ',' ', ' ',' ',' ',' ',' ',' ',' ',' ',' ',0};
+const char geloest[] = {'G', 'e', 'l', 239, 's', 't', ':', ' ',' ',' ',' ',' ',' ',' ',' ',' ', 0};
 
 unsigned long best = -1;
 
 const char* stateText(State theState) {
   switch (theState) {
-    case BEREIT: return "Bereit";
-    case START1: return "Start Anschau";
-    case ANSCHAUEN: return "Anschauen";
-    case PIEP: return "Schnell!!";
-    case START2: return startloesen;
-    case LOESEN: return loesen;
-    case ANZEIGE: return "Fertig";
-    case ZUSPAET: return "Schade!";
+    case BEREIT:     return "Bereit         ";
+    case START1:     return "Start Anschau  ";
+    case ANSCHAUEN:  return "Anschauen      ";
+    case PIEP:       return "Schnell!!      ";
+    case START2:     return startloesenstring;
+    case LOESEN:     return loesen;
+    case ANZEIGE:    return "Fertig         ";
+    case ZUSPAET:    return "Schade!        ";
+    case LOESCHEN:   return "LOESCHEN??     ";
   }
 }
 void printState(State theState) {
   lcd.setCursor(0, 0);
   lcd.print(stateText(theState));
-  lcd.print("            ");
 }
 
-void printTime(const char*text, unsigned long theTime) {
+void printTime(const char*text, unsigned long theTime, byte theLine=1) {
   if (text > 0) {
-    lcd.setCursor(0, 1);
+    lcd.setCursor(0, theLine);
     lcd.print(text);
-    lcd.print("         ");
   }
   int len = 1;
-  int secs = theTime / 1000;
-  if (secs >= 100000) {
-    len = 6;
-  }
-  else if (secs >= 10000) {
-    len = 5;
-  }
-  else if (secs >= 1000) {
-    len = 4;
+  unsigned long secs = theTime / 1000;
+  if (secs >= 1000) {
+    len = 3;
+    secs=999;
   }
   else if (secs >= 100) {
     len = 3;
@@ -93,13 +95,38 @@ void printTime(const char*text, unsigned long theTime) {
   else if (secs >= 10) {
     len = 2;
   }
-  lcd.setCursor(12 - len, 1);
+  lcd.setCursor(13 - len, theLine);
   lcd.print(secs);
   lcd.print(",");
-  lcd.print(theTime % 1000);
+  int p = (theTime % 1000l)/10;
+  lcd.print(p);
 }
 
 
+
+byte zeitEinfuegen(unsigned long theTime){
+  byte eplatz =0;
+  
+  for(byte i=0; i<BESTLENGTH; i++){
+    if(bestenListe[i] == 0 || bestenListe[i] > theTime){
+      eplatz = i+1;
+      break;
+    }
+  }
+  if(eplatz == 0){
+    return 0;
+  }
+
+  for(byte i=BESTLENGTH-1; i>= eplatz; i--){
+    bestenListe[i] = bestenListe[i-1];
+  }
+  bestenListe[platz-1] = theTime;
+  if(eplatz == 1){
+    printTime("To BEAT: ",theTime , 3);
+  }
+  return eplatz;
+}
+  
 volatile boolean stateChanged = 0;
 
 void evalPins(byte left, byte right) {
@@ -145,8 +172,15 @@ void evalPins(byte left, byte right) {
         if (best < 0 || best > loeseZeit) {
           best = loeseZeit;
         }
+        platz = zeitEinfuegen(loeseZeit);
+        if(platz > 0){
+          lcd.setCursor(0,2);
+          lcd.print("Platz: ");
+          lcd.print(platz);
+        }
         stateChanged = 1;
         sperrZeit = now + 500;
+        
         //printTime("FERTIG!",loeseZeit);
         //Serial.println("LOESEN->ANZEIGE");
       }
@@ -186,21 +220,24 @@ void setup() {
 
   refOK = ADCTouch.read(OKPAD, 100);    //account for the capacitance of the pad
 
-  lcd.setCursor(0,3);lcd.print(refl);
-  lcd.setCursor(8,3);lcd.print(refr);
+  //lcd.setCursor(0,3);lcd.print(refl);
+  //lcd.setCursor(8,3);lcd.print(refr);
 
   delay(1000);
   refl = ADCTouch.read(LEFTPAD, 200);    //create reference values to
   refr = ADCTouch.read(RIGHTPAD, 200);    //account for the capacitance of the pad
   refOK = ADCTouch.read(OKPAD, 200);    //account for the capacitance of the pad
 
-  lcd.setCursor(0,3);lcd.print(refl);
-  lcd.setCursor(8,3);lcd.print(refr);
+  //lcd.setCursor(0,3);lcd.print(refl);
+  //lcd.setCursor(8,3);lcd.print(refr);
 
   refl += limit;
   refr += limit;
   refOK += limit;
   delay(1000);
+
+  pinMode(SETTINGSWITCH, INPUT);
+  digitalWrite(SETTINGSWITCH, 1);
 
   //showTime();
 }
@@ -215,11 +252,12 @@ void beep2() {
 }
 
 void showTime(){
+  
   lcd.setCursor(0,3);
   
   // Send date
   lcd.print(rtc.getDateStr(FORMAT_XS));
-  lcd.print(" ");
+  lcd.print("T");
   // Send time
   lcd.print(rtc.getTimeStr(FORMAT_LONG));
     
@@ -245,14 +283,43 @@ void beep4() {
   }
 }
 
+void loeschePlatz(byte platz){
+  if(platz==0){
+    return;
+  }
+  for (int i=platz-1; i<BESTLENGTH-1; i++){
+    bestenListe[i] = bestenListe[i+1];
+  }
+  bestenListe[BESTLENGTH-1] = 0;
+  if(platz == 1){
+    printTime("To BEAT: ",bestenListe[0], 3);    
+  }
+}
 
 int raisedl = 0;
 int raisedr = 0;
 
 void loop() {
   unsigned long now = millis();
+
   actionl = 0;
   actionr = 0;
+  
+  if( state == ANZEIGE && platz > 0){
+    int val = ADCTouch.read(OKPAD, 100);
+    if(val > refOK){
+      printState(LOESCHEN);
+      delay(500);
+      val = ADCTouch.read(OKPAD, 100);
+      lcd.setCursor(8,0);lcd.print(val);
+      if(val > refOK){
+        loeschePlatz(platz);
+        state=BEREIT;
+        printState(BEREIT);
+      }
+    }
+  }
+
   if(now > blockedl){
     int val = ADCTouch.read(LEFTPAD,40);
     int valuel = (val < refl);
@@ -288,6 +355,18 @@ void loop() {
     // */
   }
 
+  if(digitalRead(SETTINGSWITCH) == 0){
+    lcd.setCursor(15,0);lcd.print("S");
+    char* comment = "Platz 0 ";
+    for(int i=0; i<4; i++){
+      comment[6]='0'+i;
+      printTime(comment, 10*bestenListe[i], i);
+    }
+    return;
+  }
+  else{
+    lcd.setCursor(15,0);lcd.print("P");
+  }
 
   if(actionl || actionr){
     evalPins(statel, stater);
@@ -299,10 +378,10 @@ void loop() {
       beep4();
     }
     if (state == LOESEN ) {
-      printTime("RUN", now - startLoesen);
       anzeigeLoesen += AKTUALISIEREN;
     }
     stateChanged = 0;
+    return;
   }
   if (state == ANSCHAUEN && now > beepAnschauen) {
     beep1();
@@ -324,7 +403,7 @@ void loop() {
   }
 
   if (state == LOESEN && anzeigeLoesen > 0 && anzeigeLoesen <= now) {
-    printTime(0, now - startLoesen);
+    printTime("Run      ", now - startLoesen);
     anzeigeLoesen += AKTUALISIEREN;
   }
   if (state == ZUSPAET && now > endeAnschauen) {
@@ -334,7 +413,7 @@ void loop() {
   }
   if(now - lastTime > 1000){
     lastTime = now;
-    showTime();
+   // showTime();
   }
 //  */
 }
