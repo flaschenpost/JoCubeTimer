@@ -195,7 +195,7 @@ void zeigeTop10() {
 void zeigeMenue() {
   lcd.clear();
   for (int i = 0; i < 4; i++) {
-    char *eintrag = menueText((aktiverEintrag + MENU_ENDE + i) % (MENU_ENDE+1));
+    char *eintrag = menueText((aktiverEintrag + i) % (MENU_ENDE+1));
     lcd.setCursor(0, i);
     lcd.print(eintrag);
   }
@@ -223,6 +223,14 @@ void auswerteSettingsPins(byte links, byte rechts, byte ok) {
       zeigeTop10();
       break;
     case SET_MENU:
+      if (links == 0) {
+        aktiverEintrag = (aktiverEintrag + MENU_ENDE ) % (MENU_ENDE + 1);
+        break;
+      }
+      if (rechts == 0) {
+        aktiverEintrag = (aktiverEintrag + 1) % (MENU_ENDE + 1);
+        break;
+      }
       zeigeMenue();
   }
 }
