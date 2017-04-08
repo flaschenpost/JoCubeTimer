@@ -52,7 +52,7 @@ LiquidCrystal lcd(9, 8, 7, 6, 5, 4, BACKLIGHT_PIN, POSITIVE );
 // Init the DS3231 using the hardware interface
 DS3231  rtc(SDA, SCL);
 
-byte sensorSchwelle = 30;
+byte sensorSchwelle = 50;
 
 byte aktionLinks = 0;
 byte statusLinks = 1;
@@ -148,6 +148,7 @@ byte zeitEinfuegen(unsigned long zeit) {
   }
   bestenListe[eplatz - 1] = zeit;
   if (eplatz == 1) {
+    Serial.print("bestZeit: ");Serial.println(zeit);
     printzeit("To BEAT: ", zeit , 3);
   }
   return eplatz;
@@ -198,6 +199,7 @@ void auswerteSettingsPins(byte links, byte rechts, byte ok) {
 
 void auswerteSpielePins(unsigned long jetzt, byte links, byte rechts, byte ok) {
 
+  Serial.print(jetzt/1000l);Serial.print(" auswerte: ");Serial.print(links);Serial.print(rechts);Serial.print(ok);Serial.print(" ");Serial.println(status);
   switch (status) {
     case BEREIT:
       if (links == 0 && rechts == 0) {
@@ -221,7 +223,6 @@ void auswerteSpielePins(unsigned long jetzt, byte links, byte rechts, byte ok) {
         statusWechsel = 1;
       }
       break;
-      break;
     case START2:
       if (links == 1 && rechts == 1) {
         status = LOESEN;
@@ -234,25 +235,35 @@ void auswerteSpielePins(unsigned long jetzt, byte links, byte rechts, byte ok) {
       if (links == 0 && rechts == 0) {
         status = BESTAETIGEN;
         lcd.setCursor(0, 0);
-        lcd.print("BESTAETIGEN");
         loeseZeit = jetzt - startLoesen;
-        blockiertOK = jetzt + BLOCKZEIT;
-        blockiertRechts = jetzt + BLOCKZEIT;
-        blockiertLinks = jetzt + BLOCKZEIT;
+        Serial.println(loeseZeit);
         statusLinks = 1;
         statusRechts = 1;
         aktionLinks=0;
         aktionRechts=0;
-        break;
+        statusWechsel = 1;
+        status = BESTAETIGEN;
+        printzeit(geloest, loeseZeit);
+        beep4();
+        jetzt = millis();
+        blockiertOK = jetzt + BLOCKZEIT;
+        blockiertRechts = jetzt + 5*BLOCKZEIT;
+        blockiertLinks = jetzt + 5*BLOCKZEIT;
+        sperrZeit = jetzt + 500;
+        Serial.print("jetzt=");Serial.print(jetzt);Serial.print(" ");Serial.println(blockiertOK);
       }
+      break;
     case BESTAETIGEN:
-      lcd.setCursor(0,3);lcd.print(links);lcd.print(rechts);lcd.print(ok);
       if (ok == 1 && (links == 0 && rechts == 0)) {
+        Serial.print("ungueltig / ");Serial.println(ungueltig);
         lcd.setCursor(0, 1);
         lcd.print(ungueltig);
-        delay(500);
+        statusWechsel = 1;
+        sperrZeit = jetzt + 500;
+        status = BEREIT;
       }
       if (ok == 0) {
+        Serial.print("bestaetigt: l=");Serial.println(loeseZeit);
         platz = zeitEinfuegen(loeseZeit);
         lcd.setCursor(0, 2);
         if (platz > 0) {
@@ -262,11 +273,10 @@ void auswerteSpielePins(unsigned long jetzt, byte links, byte rechts, byte ok) {
         else {
           lcd.print("          ");
         }
+        statusWechsel = 1;
+        sperrZeit = jetzt + 500;
+        status = ANZEIGE;
       }
-
-      statusWechsel = 1;
-      sperrZeit = jetzt + 500;
-      status = BEREIT;
 
       //printzeit("FERTIG!",loeseZeit);
       //Serial.println("LOESEN->ANZEIGE");
@@ -293,8 +303,11 @@ void setup() {
 
   loeschen[1] = 239;
 
-  bestaetigen[4] = 245;
-  ungueltig[3]  = 239;
+  bestaetigen[4] = 225;
+  ungueltig[3]  = 245;
+  Serial.begin(38400);
+  while(!Serial){};
+  Serial.println("OK, Start!");
 
 
   // dummy first reference creation seems to give other results on battery power
@@ -315,13 +328,13 @@ void setup() {
 
   referenzLinks += sensorSchwelle;
   referenzRechts += sensorSchwelle;
-  referenzOK += sensorSchwelle;
+  referenzOK += sensorSchwelle/3;
   delay(100);
 
   pinMode(SETTINGSCHALTER, INPUT);
   digitalWrite(SETTINGSCHALTER, 1);
 
-  //showzeit();
+  showzeit();
 }
 
 void beep1() {
@@ -339,7 +352,7 @@ void showzeit() {
 
   // Send date
   lcd.print(rtc.getDateStr(FORMAT_XS));
-  lcd.print("T");
+  lcd.print(" ");
   // Send zeit
   lcd.print(rtc.getTimeStr(FORMAT_LONG));
 
@@ -394,7 +407,7 @@ void loop() {
   aktionRechts = 0;
   aktionOK = 0;
 
-  if (jetzt > blockiertOK && (istSettings == 1 || status == BESTAETIGEN) ) {
+  if (jetzt > blockiertOK) {
     int wert = ADCTouch.read(OKPAD, 100);
     byte nichtsOK = (wert < referenzOK);
     if (nichtsOK != statusOK) {
@@ -402,15 +415,8 @@ void loop() {
       blockiertOK = jetzt + BLOCKZEIT;
       statusOK = nichtsOK;
     }
-
-    if (status == BESTAETIGEN && istSettings == 0) {
-      debugout("checke bestaetigen!");
-      if (aktionOK) {
-        auswerteSpielePins(jetzt, 1, 1, statusOK);
-      }
-      return;
-    }
   }
+  
   if (jetzt > blockiertLinks) {
     int wert = ADCTouch.read(LINKSPAD, 40);
     byte nichtsLinks = (wert < referenzLinks);
@@ -425,6 +431,7 @@ void loop() {
       lcd.setCursor(0,3);lcd.print(wert);
       // */
   }
+  
   if (jetzt > blockiertRechts) {
     int wert = ADCTouch.read(RECHTSPAD, 40);
     byte nichtsRechts = (wert < referenzRechts);
@@ -459,7 +466,7 @@ void loop() {
     }
   }
 
-  if (aktionLinks || aktionRechts) {
+  if (aktionOK || aktionLinks || aktionRechts) {
     if (istSettings) {
       auswerteSettingsPins(statusLinks, statusRechts, statusOK);
     }
@@ -470,9 +477,8 @@ void loop() {
 
   if (statusWechsel) {
     printstatus(status);
-    if (status == ANZEIGE) {
+    if (status == BESTAETIGEN || status == ANZEIGE) {
       printzeit(geloest, loeseZeit);
-      beep4();
     }
     if (status == LOESEN ) {
       anzeigeLoesen += AKTUALISIEREN;
@@ -499,7 +505,7 @@ void loop() {
     return;
   }
 
-  if (status == LOESEN && anzeigeLoesen > 0 && anzeigeLoesen <= jetzt) {
+  if ((status == LOESEN) && anzeigeLoesen > 0 && anzeigeLoesen <= jetzt) {
     printzeit("Run      ", jetzt - startLoesen);
     anzeigeLoesen += AKTUALISIEREN;
   }
