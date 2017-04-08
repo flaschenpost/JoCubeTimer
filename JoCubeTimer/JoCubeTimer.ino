@@ -39,10 +39,12 @@ byte platz = 0;
 byte listeOben = 0;
 
 // in welchem Status sind wir?
-enum Status {BEREIT, START1, ANSCHAUEN, PIEP, START2, LOESEN, ANZEIGE, ZUSPAET, BESTAETIGEN} status = BEREIT;
+enum Status {S_BEREIT, S_START1, S_ANSCHAUEN, S_PIEP, S_START2, S_LOESEN, S_ANZEIGE, S_ZUSPAET, S_BESTAETIGEN} status = S_BEREIT;
 
 // in welchem SettingStatus sind wir?
-enum SettingStatus {TOP10} settingStatus = TOP10;
+enum SettingStatus {SET_TOP10, SET_MENU, SET_LOESCHEN} settingStatus = SET_TOP10;
+
+enum MenueEintrag {MENU_ZEIGETOP10, MENU_LOESCHEN, MENU_EINSTELLUNGEN, MENU_ENDE} aktiverEintrag = MENU_ZEIGETOP10;
 
 unsigned int referenzLinks, referenzRechts, referenzOK;     //reference values to remove offset
 
@@ -78,23 +80,32 @@ unsigned long sperrZeit = 0;
 char *startloesen = "Start l.sen    ";
 char *loesen      = "l.sen          ";
 char *geloest     = "gel.st         ";
-char *loeschen    = "L.SCHEN??      ";
+char *loeschen    = "L.schen        ";
 char *bestaetigen = "Best.tigen     ";
 char *ungueltig   = "ung.ltig       ";
 
 byte istSettings = 0;
 
+const char* menueText(MenueEintrag eintrag) {
+  switch (eintrag) {
+    case MENU_ZEIGETOP10:      return "Top10         ";
+    case MENU_LOESCHEN:        return loeschen;
+    case MENU_EINSTELLUNGEN:   return "Einstellungen ";
+    case MENU_ENDE:            return "--------------";
+  }
+}
+
 const char* statusText(Status thestatus) {
   switch (thestatus) {
-    case BEREIT:     return "Bereit         ";
-    case START1:     return "Start Anschau  ";
-    case ANSCHAUEN:  return "Anschauen      ";
-    case PIEP:       return "Schnell!!      ";
-    case START2:     return startloesen;
-    case LOESEN:     return loesen;
-    case ANZEIGE:    return "Fertig         ";
-    case ZUSPAET:    return "Schade!        ";
-    case BESTAETIGEN: return "Richtig?       ";
+    case S_BEREIT:     return "Bereit         ";
+    case S_START1:     return "Start Anschau  ";
+    case S_ANSCHAUEN:  return "Anschauen      ";
+    case S_PIEP:       return "Schnell!!      ";
+    case S_START2:     return startloesen;
+    case S_LOESEN:     return loesen;
+    case S_ANZEIGE:    return "Fertig         ";
+    case S_ZUSPAET:    return "Schade!        ";
+    case S_BESTAETIGEN: return "Richtig?       ";
   }
 }
 void printstatus(Status thestatus) {
@@ -148,7 +159,7 @@ byte zeitEinfuegen(unsigned long zeit) {
   }
   bestenListe[eplatz - 1] = zeit;
   if (eplatz == 1) {
-    Serial.print("bestZeit: ");Serial.println(zeit);
+    // Serial.print("bestZeit: ");Serial.println(zeit);
     printzeit("To BEAT: ", zeit , 3);
   }
   return eplatz;
@@ -179,91 +190,110 @@ void zeigeTop10() {
     }
     printzeit(comment, bestenListe[row], i);
   }
+}
 
+void zeigeMenue() {
+  lcd.clear();
+  for (int i = 0; i < 4; i++) {
+    char *eintrag = menueText((aktiverEintrag + MENU_ENDE + i) % (MENU_ENDE+1));
+    lcd.setCursor(0, i);
+    lcd.print(eintrag);
+  }
 }
 
 void auswerteSettingsPins(byte links, byte rechts, byte ok) {
 
   switch (settingStatus) {
-    case TOP10:
+    case SET_TOP10:
+      if (ok == 0) {
+        settingStatus = SET_MENU;
+        aktiverEintrag = MENU_ZEIGETOP10;
+
+        zeigeMenue();
+        break;
+      }
       if (links == 0) {
         listeOben = (BESTENLAENGE + listeOben - 1) % BESTENLAENGE;
+        break;
       }
       if (rechts == 0) {
         listeOben = (BESTENLAENGE + listeOben + 1) % BESTENLAENGE;
+        break;
       }
       zeigeTop10();
       break;
+    case SET_MENU:
+      zeigeMenue();
   }
 }
 
 void auswerteSpielePins(unsigned long jetzt, byte links, byte rechts, byte ok) {
 
-  Serial.print(jetzt/1000l);Serial.print(" auswerte: ");Serial.print(links);Serial.print(rechts);Serial.print(ok);Serial.print(" ");Serial.println(status);
+  // Serial.print(jetzt/1000l);Serial.print(" auswerte: ");Serial.print(links);Serial.print(rechts);Serial.print(ok);Serial.print(" ");Serial.println(status);
   switch (status) {
-    case BEREIT:
+    case S_BEREIT:
       if (links == 0 && rechts == 0) {
         statusWechsel = 1;
-        status = START1;
+        status = S_START1;
       }
       break;
 
-    case START1:
+    case S_START1:
       if (links == 1 && rechts == 1) {
-        status = ANSCHAUEN;
+        status = S_ANSCHAUEN;
         statusWechsel = 1;
         endeAnschauen = jetzt + START1_END_ZEIT;
         beepAnschauen = jetzt + START1_BEEP_ZEIT;
       }
       break;
-    case ANSCHAUEN:
-    case PIEP:
+    case S_ANSCHAUEN:
+    case S_PIEP:
       if (links == 0 && rechts == 0) {
-        status = START2;
+        status = S_START2;
         statusWechsel = 1;
       }
       break;
-    case START2:
+    case S_START2:
       if (links == 1 && rechts == 1) {
-        status = LOESEN;
+        status = S_LOESEN;
         statusWechsel = 1;
         startLoesen = jetzt;
         anzeigeLoesen = startLoesen + AKTUALISIEREN;
       }
       break;
-    case LOESEN:
+    case S_LOESEN:
       if (links == 0 && rechts == 0) {
-        status = BESTAETIGEN;
+        status = S_BESTAETIGEN;
         lcd.setCursor(0, 0);
         loeseZeit = jetzt - startLoesen;
-        Serial.println(loeseZeit);
+        // Serial.println(loeseZeit);
         statusLinks = 1;
         statusRechts = 1;
-        aktionLinks=0;
-        aktionRechts=0;
+        aktionLinks = 0;
+        aktionRechts = 0;
         statusWechsel = 1;
-        status = BESTAETIGEN;
+        status = S_BESTAETIGEN;
         printzeit(geloest, loeseZeit);
         beep4();
         jetzt = millis();
         blockiertOK = jetzt + BLOCKZEIT;
-        blockiertRechts = jetzt + 5*BLOCKZEIT;
-        blockiertLinks = jetzt + 5*BLOCKZEIT;
+        blockiertRechts = jetzt + 5 * BLOCKZEIT;
+        blockiertLinks = jetzt + 5 * BLOCKZEIT;
         sperrZeit = jetzt + 500;
-        Serial.print("jetzt=");Serial.print(jetzt);Serial.print(" ");Serial.println(blockiertOK);
+        // Serial.print("jetzt=");Serial.print(jetzt);Serial.print(" ");Serial.println(blockiertOK);
       }
       break;
-    case BESTAETIGEN:
+    case S_BESTAETIGEN:
       if (ok == 1 && (links == 0 && rechts == 0)) {
-        Serial.print("ungueltig / ");Serial.println(ungueltig);
+        // Serial.print("ungueltig / ");Serial.println(ungueltig);
         lcd.setCursor(0, 1);
         lcd.print(ungueltig);
         statusWechsel = 1;
         sperrZeit = jetzt + 500;
-        status = BEREIT;
+        status = S_BEREIT;
       }
       if (ok == 0) {
-        Serial.print("bestaetigt: l=");Serial.println(loeseZeit);
+        // Serial.print("bestaetigt: l=");Serial.println(loeseZeit);
         platz = zeitEinfuegen(loeseZeit);
         lcd.setCursor(0, 2);
         if (platz > 0) {
@@ -275,16 +305,16 @@ void auswerteSpielePins(unsigned long jetzt, byte links, byte rechts, byte ok) {
         }
         statusWechsel = 1;
         sperrZeit = jetzt + 500;
-        status = ANZEIGE;
+        status = S_ANZEIGE;
       }
 
       //printzeit("FERTIG!",loeseZeit);
-      //Serial.println("LOESEN->ANZEIGE");
+      //Serial.println("LOESEN->S_ANZEIGE");
       break;
-    case ANZEIGE:
+    case S_ANZEIGE:
       if (links == 0 && rechts == 0 && jetzt > sperrZeit) {
-        status = START1;
-        //Serial.println("ANZEIGE-> START1");
+        status = S_START1;
+        //Serial.println("S_ANZEIGE-> S_START1");
       }
       break;
   }
@@ -298,16 +328,16 @@ void setup() {
   rtc.begin();
   startloesen[7] = 239;
   loesen[1] = 239;
-  printstatus(BEREIT);
+  printstatus(S_BEREIT);
   geloest[3] = 239;
 
   loeschen[1] = 239;
 
   bestaetigen[4] = 225;
   ungueltig[3]  = 245;
-  Serial.begin(38400);
-  while(!Serial){};
-  Serial.println("OK, Start!");
+  // Serial.begin(38400);
+  // while(!Serial){};
+  // Serial.println("OK, Start!");
 
 
   // dummy first reference creation seems to give other results on battery power
@@ -328,7 +358,7 @@ void setup() {
 
   referenzLinks += sensorSchwelle;
   referenzRechts += sensorSchwelle;
-  referenzOK += sensorSchwelle/3;
+  referenzOK += sensorSchwelle / 3;
   delay(100);
 
   pinMode(SETTINGSCHALTER, INPUT);
@@ -416,7 +446,7 @@ void loop() {
       statusOK = nichtsOK;
     }
   }
-  
+
   if (jetzt > blockiertLinks) {
     int wert = ADCTouch.read(LINKSPAD, 40);
     byte nichtsLinks = (wert < referenzLinks);
@@ -431,7 +461,7 @@ void loop() {
       lcd.setCursor(0,3);lcd.print(wert);
       // */
   }
-  
+
   if (jetzt > blockiertRechts) {
     int wert = ADCTouch.read(RECHTSPAD, 40);
     byte nichtsRechts = (wert < referenzRechts);
@@ -477,41 +507,41 @@ void loop() {
 
   if (statusWechsel) {
     printstatus(status);
-    if (status == BESTAETIGEN || status == ANZEIGE) {
+    if (status == S_BESTAETIGEN || status == S_ANZEIGE) {
       printzeit(geloest, loeseZeit);
     }
-    if (status == LOESEN ) {
+    if (status == S_LOESEN ) {
       anzeigeLoesen += AKTUALISIEREN;
     }
     statusWechsel = 0;
     return;
   }
-  if (status == ANSCHAUEN && jetzt > beepAnschauen) {
+  if (status == S_ANSCHAUEN && jetzt > beepAnschauen) {
     beep1();
-    status = PIEP;
-    printstatus(PIEP);
+    status = S_PIEP;
+    printstatus(S_PIEP);
     beepAnschauen += 900;
   }
-  if (status == PIEP && jetzt > beepAnschauen) {
+  if (status == S_PIEP && jetzt > beepAnschauen) {
     beepAnschauen += 250;
     beep2();
   }
-  if (status == PIEP && jetzt > endeAnschauen) {
+  if (status == S_PIEP && jetzt > endeAnschauen) {
     //Serial.println("Abbrechen...");
-    printstatus(ZUSPAET);
-    status = ZUSPAET;
+    printstatus(S_ZUSPAET);
+    status = S_ZUSPAET;
     endeAnschauen = endeAnschauen + 2000;
     beep3();
     return;
   }
 
-  if ((status == LOESEN) && anzeigeLoesen > 0 && anzeigeLoesen <= jetzt) {
+  if ((status == S_LOESEN) && anzeigeLoesen > 0 && anzeigeLoesen <= jetzt) {
     printzeit("Run      ", jetzt - startLoesen);
     anzeigeLoesen += AKTUALISIEREN;
   }
-  if (status == ZUSPAET && jetzt > endeAnschauen) {
-    printstatus(BEREIT);
-    status = BEREIT;
+  if (status == S_ZUSPAET && jetzt > endeAnschauen) {
+    printstatus(S_BEREIT);
+    status = S_BEREIT;
     endeAnschauen = 0;
   }
   if (jetzt - lastzeit > 1000) {
