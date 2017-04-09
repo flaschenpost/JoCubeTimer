@@ -42,9 +42,9 @@ byte listeOben = 0;
 enum Status {S_BEREIT, S_START1, S_ANSCHAUEN, S_PIEP, S_START2, S_LOESEN, S_ANZEIGE, S_ZUSPAET, S_BESTAETIGEN} status = S_BEREIT;
 
 // in welchem SettingStatus sind wir?
-enum SettingStatus {SET_TOP10, SET_MENU, SET_LOESCHEN} settingStatus = SET_TOP10;
+enum SettingStatus {SET_TOP10, SET_MENU, SET_LOESCHEN, SET_TON, SET_ZEIT} settingStatus = SET_TOP10;
 
-enum MenueEintrag {MENU_ZEIGETOP10, MENU_LOESCHEN, MENU_EINSTELLUNGEN, MENU_ENDE} aktiverEintrag = MENU_ZEIGETOP10;
+enum MenueEintrag {MENU_ZEIGETOP10, MENU_LOESCHEN, MENU_TON, MENU_ZEIT, MENU_ENDE} aktiverEintrag = MENU_ZEIGETOP10;
 
 unsigned int referenzLinks, referenzRechts, referenzOK;     //reference values to remove offset
 
@@ -86,11 +86,14 @@ char *ungueltig   = "ung.ltig       ";
 
 byte istSettings = 0;
 
+byte istStumm = 0;
+
 const char* menueText(MenueEintrag eintrag) {
   switch (eintrag) {
     case MENU_ZEIGETOP10:      return "Top10         ";
     case MENU_LOESCHEN:        return loeschen;
-    case MENU_EINSTELLUNGEN:   return "Einstellungen ";
+    case MENU_TON:             return "Ton           ";
+    case MENU_ZEIT:            return "Zeit          ";
     case MENU_ENDE:            return "--------------";
   }
 }
@@ -201,9 +204,35 @@ void zeigeMenue() {
   }
 }
 
+void zeigeStummEinstellung(){
+  lcd.clear();
+  if(istStumm){
+    lcd.print("Stumm");
+  }
+  else{
+    lcd.print("Mit Ton");
+  }
+}
+
 void auswerteSettingsPins(byte links, byte rechts, byte ok) {
 
   switch (settingStatus) {
+    case SET_ZEIT:
+      lcd.clear();
+      showzeit();
+      if(ok == 0){
+        settingStatus = SET_MENU;
+      }
+      break;
+    case SET_TON:
+      if(rechts == 0 || links == 0){
+        istStumm = 1-istStumm;
+      }
+      if(ok == 0){
+        settingStatus = SET_MENU;
+      }
+      zeigeStummEinstellung();
+      break;
     case SET_TOP10:
       if (ok == 0) {
         settingStatus = SET_MENU;
@@ -230,6 +259,23 @@ void auswerteSettingsPins(byte links, byte rechts, byte ok) {
       if (rechts == 0) {
         aktiverEintrag = (aktiverEintrag + 1) % (MENU_ENDE + 1);
         break;
+      }
+      if(ok == 0){
+        switch(aktiverEintrag){
+          case MENU_ZEIGETOP10:      
+            settingStatus = SET_TOP10;
+            break;
+          case MENU_LOESCHEN:        
+            break;
+          case MENU_TON:
+            settingStatus = SET_TON;
+            zeigeStummEinstellung();
+            break;
+          case MENU_ZEIT:
+            settingStatus = SET_ZEIT;
+            return "Zeit          ";
+    case MENU_ENDE:            return "--------------";
+        }
       }
       zeigeMenue();
   }
@@ -377,9 +423,15 @@ void setup() {
 
 void beep1() {
   //Serial.println("beep2");
+  if(istStumm){
+    return;
+  }
   tone(LAUTSPRECHERPIN, BEEP1_FREQUENZ, BEEP1_LAENGE);
 }
 void beep2() {
+  if(istStumm){
+    return;
+  }
   //Serial.println("beep2");
   tone(LAUTSPRECHERPIN, BEEP2_FREQUENZ, BEEP2_LAENGE);
 }
@@ -400,6 +452,9 @@ int lastzeit = 0;
 
 void beep3() {
   //Serial.println("beep2");
+  if(istStumm){
+    return;
+  }
   long freq = BEEP3_FREQUENZ;
   for (int i = 0; i < 10; i++) {
     tone(LAUTSPRECHERPIN, freq, BEEP3_LAENGE);
@@ -408,6 +463,9 @@ void beep3() {
   }
 }
 void beep4() {
+  if(istStumm){
+    return;
+  }
   long freq = BEEP1_FREQUENZ;
   for (int i = 0; i < 9; i++) {
     tone(LAUTSPRECHERPIN, freq, BEEP3_LAENGE);
@@ -490,6 +548,7 @@ void loop() {
       istSettings = 1;
       lcd.clear();
       lcd.setCursor(15, 0); lcd.print("S");
+      settingStatus = SET_TOP10;
       auswerteSettingsPins(statusLinks, statusRechts, statusOK);
       return;
     }
