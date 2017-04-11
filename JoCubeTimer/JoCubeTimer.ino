@@ -1,7 +1,7 @@
 #include <ADCTouch.h>
 #include <LiquidCrystal.h>
 #include <DS3231.h>
-
+#include <SD.h>
 
 #define OKPAD    A1
 #define RECHTSPAD A2
@@ -31,12 +31,19 @@
 
 #define AUTOMATISCH_ABSCHALTEN 20000l
 
+#define SDPIN 1
+
+const char* top10Filename = "JOTOP10.TXT";
+const char* logFilename = "JOLOG.TXT";
+
 unsigned long bestenListe[BESTENLAENGE + 1] = {0};
 
 volatile boolean statusWechsel = 0;
 
 byte platz = 0;
 byte listeOben = 0;
+byte hasSDCard = 0;
+
 
 // in welchem Status sind wir?
 enum Status {S_BEREIT, S_START1, S_ANSCHAUEN, S_PIEP, S_START2, S_LOESEN, S_ANZEIGE, S_ZUSPAET, S_BESTAETIGEN} status = S_BEREIT;
@@ -76,6 +83,8 @@ unsigned long anzeigeLoesen = 0;
 unsigned long loeseZeit = 0;
 
 unsigned long sperrZeit = 0;
+
+
 
 char *startloesen = "Start l.sen    ";
 char *loesen      = "l.sen          ";
@@ -165,6 +174,7 @@ byte zeitEinfuegen(unsigned long zeit) {
     // Serial.print("bestZeit: ");Serial.println(zeit);
     printzeit("To BEAT: ", zeit , 3);
   }
+  writeSDStatus();
   return eplatz;
 }
 
@@ -179,6 +189,7 @@ void loeschePlatz(byte eplatz) {
   if (eplatz == 1) {
     printzeit("To BEAT: ", bestenListe[0], 3);
   }
+  writeSDStatus();
 }
 
 void zeigeTop10() {
@@ -198,18 +209,18 @@ void zeigeTop10() {
 void zeigeMenue() {
   lcd.clear();
   for (int i = 0; i < 4; i++) {
-    char *eintrag = menueText((aktiverEintrag + i) % (MENU_ENDE+1));
+    char *eintrag = menueText((aktiverEintrag + i) % (MENU_ENDE + 1));
     lcd.setCursor(0, i);
     lcd.print(eintrag);
   }
 }
 
-void zeigeStummEinstellung(){
+void zeigeStummEinstellung() {
   lcd.clear();
-  if(istStumm){
+  if (istStumm) {
     lcd.print("Stumm");
   }
-  else{
+  else {
     lcd.print("Mit Ton");
   }
 }
@@ -220,15 +231,15 @@ void auswerteSettingsPins(byte links, byte rechts, byte ok) {
     case SET_ZEIT:
       lcd.clear();
       showzeit();
-      if(ok == 0){
+      if (ok == 0) {
         settingStatus = SET_MENU;
       }
       break;
     case SET_TON:
-      if(rechts == 0 || links == 0){
-        istStumm = 1-istStumm;
+      if (rechts == 0 || links == 0) {
+        istStumm = 1 - istStumm;
       }
-      if(ok == 0){
+      if (ok == 0) {
         settingStatus = SET_MENU;
       }
       zeigeStummEinstellung();
@@ -251,6 +262,24 @@ void auswerteSettingsPins(byte links, byte rechts, byte ok) {
       }
       zeigeTop10();
       break;
+    case SET_LOESCHEN:
+      if (ok == 0) {
+        loeschePlatz(listeOben+1);
+
+        zeigeTop10();
+        settingStatus=SET_MENU;
+        break;
+      }
+      if (links == 0) {
+        listeOben = (BESTENLAENGE + listeOben - 1) % BESTENLAENGE;
+        break;
+      }
+      if (rechts == 0) {
+        listeOben = (BESTENLAENGE + listeOben + 1) % BESTENLAENGE;
+        break;
+      }
+      zeigeTop10();
+      break;
     case SET_MENU:
       if (links == 0) {
         aktiverEintrag = (aktiverEintrag + MENU_ENDE ) % (MENU_ENDE + 1);
@@ -260,12 +289,13 @@ void auswerteSettingsPins(byte links, byte rechts, byte ok) {
         aktiverEintrag = (aktiverEintrag + 1) % (MENU_ENDE + 1);
         break;
       }
-      if(ok == 0){
-        switch(aktiverEintrag){
-          case MENU_ZEIGETOP10:      
+      if (ok == 0) {
+        switch (aktiverEintrag) {
+          case MENU_ZEIGETOP10:
             settingStatus = SET_TOP10;
             break;
-          case MENU_LOESCHEN:        
+          case MENU_LOESCHEN:
+            settingStatus = SET_LOESCHEN;
             break;
           case MENU_TON:
             settingStatus = SET_TON;
@@ -274,7 +304,7 @@ void auswerteSettingsPins(byte links, byte rechts, byte ok) {
           case MENU_ZEIT:
             settingStatus = SET_ZEIT;
             return "Zeit          ";
-    case MENU_ENDE:            return "--------------";
+          case MENU_ENDE:            return "--------------";
         }
       }
       zeigeMenue();
@@ -374,10 +404,66 @@ void auswerteSpielePins(unsigned long jetzt, byte links, byte rechts, byte ok) {
   }
 }
 
+void readSDStatus() {
+  // Serial.print("called readSDStatus ");Serial.println(top10Filename);
+  if (SD.exists(top10Filename)) {
+    // Serial.print("exists");Serial.println(top10Filename);
+    File top10File = SD.open(top10Filename, FILE_READ);
+
+    /*
+    if (top10File) {
+      Serial.println("dummy byte content:");
+      while (top10File.available()) {
+        Serial.print((char)top10File.read());
+      }
+      top10File.seek(0);
+    }
+    Serial.println("-----");
+    */
+    if (top10File) {
+      top10File.seek(0);
+      int zeileNr = 0;
+      while (top10File.available()) {
+        char zeile[20] = {0};
+        top10File.readBytesUntil(0x0a, zeile, 19);
+        // Serial.print("Zeile ");Serial.println(zeile);
+        String szeile(zeile);
+        // Serial.print("String Zeile "); Serial.println(szeile);
+        bestenListe[zeileNr] = szeile.toInt();
+        // Serial.print("inhalt: "); Serial.println(bestenListe[zeileNr]);
+        zeileNr++;
+      }
+      top10File.close();
+    }
+
+  }
+   // else{
+   // Serial.println("not found!");
+   // }
+}
+
+void writeSDStatus() {
+  File top10File = SD.open(top10Filename, FILE_WRITE);
+  if (top10File) {
+    top10File.seek(0);
+    for (int i = 0; i < BESTENLAENGE; i++) {
+      top10File.println(bestenListe[i]);
+      // Serial.print("SD::written "); Serial.println(bestenListe[i]);
+    }
+    top10File.close();
+    lcd.setCursor(13, 0);
+    lcd.print("WSD");
+
+  }
+}
 
 void setup() {
+  pinMode(SDPIN, OUTPUT);
+  digitalWrite(SDPIN, 1);
   lcd.backlight();
   lcd.begin(16, 4);
+  delay(20);
+
   // Initialize the rtc object
   rtc.begin();
   startloesen[7] = 239;
@@ -386,9 +472,42 @@ void setup() {
   geloest[3] = 239;
 
   loeschen[1] = 239;
+  if (0) {
+    Serial.begin(9600);
+    for (int i = 0; i < 1000; i++) {
+      if (Serial) {
+        break;
+      }
+      delay(1);
+    }
+  }
+
+  if (SD.begin(SDPIN)) {
+    hasSDCard = 1;
+    readSDStatus();
+    lcd.setCursor(14, 0);
+    lcd.print("SD");
+  }
 
   bestaetigen[4] = 225;
   ungueltig[3]  = 245;
+
+  /*
+    pinMode(1, OUTPUT);
+    digitalWrite(1,HIGH);
+    delay(200);
+    digitalWrite(1,LOW);
+    delay(200);
+    pinMode(1, INPUT);
+    if (!SD.begin(1)) {
+    lcd.setCursor(0,2);
+    lcd.print("NO SD");
+    }
+    else{
+    lcd.print("YEAH, SD");
+    }
+    delay(2000);
+    // */
   // Serial.begin(38400);
   // while(!Serial){};
   // Serial.println("OK, Start!");
@@ -399,10 +518,7 @@ void setup() {
   dummy = ADCTouch.read(RECHTSPAD, 80);    //account for the capacitance of the pad
   dummy = ADCTouch.read(OKPAD, 80);
 
-  //lcd.setCursor(0,3);lcd.print(referenzLinks);
-  //lcd.setCursor(8,3);lcd.print(referenzRechts);
 
-  delay(200);
   referenzLinks = ADCTouch.read(LINKSPAD, 200);    //create reference values to
   referenzRechts = ADCTouch.read(RECHTSPAD, 200);    //account for the capacitance of the pad
   referenzOK = ADCTouch.read(OKPAD, 200);    //account for the capacitance of the pad
@@ -423,13 +539,13 @@ void setup() {
 
 void beep1() {
   //Serial.println("beep2");
-  if(istStumm){
+  if (istStumm) {
     return;
   }
   tone(LAUTSPRECHERPIN, BEEP1_FREQUENZ, BEEP1_LAENGE);
 }
 void beep2() {
-  if(istStumm){
+  if (istStumm) {
     return;
   }
   //Serial.println("beep2");
@@ -452,7 +568,7 @@ int lastzeit = 0;
 
 void beep3() {
   //Serial.println("beep2");
-  if(istStumm){
+  if (istStumm) {
     return;
   }
   long freq = BEEP3_FREQUENZ;
@@ -463,7 +579,7 @@ void beep3() {
   }
 }
 void beep4() {
-  if(istStumm){
+  if (istStumm) {
     return;
   }
   long freq = BEEP1_FREQUENZ;
@@ -499,6 +615,7 @@ void loop() {
     delay(50);
     return;
   */
+
   aktionLinks = 0;
   aktionRechts = 0;
   aktionOK = 0;
@@ -549,6 +666,7 @@ void loop() {
       lcd.clear();
       lcd.setCursor(15, 0); lcd.print("S");
       settingStatus = SET_TOP10;
+      status = S_BEREIT;
       auswerteSettingsPins(statusLinks, statusRechts, statusOK);
       return;
     }
@@ -558,6 +676,8 @@ void loop() {
     if (istSettings == 1) {
       lcd.clear();
       lcd.setCursor(15, 0); lcd.print("P");
+      settingStatus = SET_TOP10;
+      status = S_BEREIT;
       istSettings = 0;
       statusWechsel = 1;
     }

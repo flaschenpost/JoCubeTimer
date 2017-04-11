@@ -1,0 +1,29 @@
+Links:
+
+1 "1" TX SDcard:CS
+2 "0" RX 
+3     GND
+4     GND
+5 "2" RTC:SDA RTC
+6 "3" RTC:SCL RTC
+7 "4" A6 Display 
+8 "5"  Display 
+9 "6" A7 Display 
+10 "7"  Display 
+11 "8" A8 Display 
+12 "9" A9 Display 
+
+Rechts:
+
+1 "RAW"
+2 "GND"
+3 "RST"
+4 "VCC"
+5 "21" A3 Linkes Pad
+6 "20" A2 "OK"- Pad
+7 "19" A1 Rechtes Pad
+8 "18" A0 Settings-Schalter
+9 "15" SCLK SDCard
+10 "14" MISO SDCard
+11 "16" MOSI SDCard
+12 "10" A10 Speaker
