@@ -2,6 +2,7 @@
 #include <LiquidCrystal.h>
 #include <DS3231.h>
 #include <SD.h>
+#include <EEPROM.h>
 
 #define OKPAD    A1
 #define RECHTSPAD A2
@@ -32,6 +33,10 @@
 #define AUTOMATISCH_ABSCHALTEN 20000l
 
 #define SDPIN 1
+
+#define EEPROM_CUBETYPE 42
+
+unsigned long naechsteZeigeZeit = 0;
 
 char* top10Filename = "JOTOP3X3.TXT";
 const char* logFilename = "JOLOG";
@@ -86,12 +91,12 @@ unsigned long loeseZeit = 0;
 
 Time time;
 
-char *startloesen = "Start l.sen    ";
-char *loesen      = "l.sen          ";
-char *geloest     = "gel.st         ";
-char *loeschen    = "L.schen        ";
-char *bestaetigen = "Best.tigen     ";
-char *ungueltig   = "ung.ltig       ";
+char *startloesen = "Start l.sen  ";
+char *loesen      = "l.sen        ";
+char *geloest     = "gel.st       ";
+char *loeschen    = "L.schen      ";
+char *bestaetigen = "Best.tigen   ";
+char *ungueltig   = "ung.ltig     ";
 
 byte istSettings = 0;
 
@@ -109,18 +114,28 @@ void printTyp(CUBETYP typ, byte i=0){
   }
 }
 
+char* typName(CUBETYP typ){
+  switch(cubeTyp){
+    case TYP3x3: return "3X3";
+    case TYP2x2: return "2X2";
+    case TYPSQ1: return "SQ1";
+  }  
+}
+
 void printStatus(Status thestatus, byte i=0) {
   lcd.setCursor(0, i);
   switch (thestatus) {
-    case S_BEREIT:     lcd.print( "Bereit         ");break;
-    case S_START1:     lcd.print( "Start Anschau  ");break;
-    case S_ANSCHAUEN:  lcd.print( "Anschauen      ");break;
-    case S_PIEP:       lcd.print( "Schnell!!      ");break;
+    case S_BEREIT:     lcd.print( "Bereit       ");break;
+    case S_START1:     lcd.print( "St. Anschau  ");break;
+    case S_ANSCHAUEN:  lcd.print( "Anschauen    ");break;
+    case S_PIEP:       lcd.print( "Schnell!!    ");break;
     case S_START2:     lcd.print(startloesen);break;
     case S_LOESEN:     lcd.print(loesen);break;
-    case S_ZUSPAET:    lcd.print( "Schade!        ");break;
-    case S_BESTAETIGEN: lcd.print( "Richtig?       ");break;
+    case S_ZUSPAET:    lcd.print( "Schade!      ");break;
+    case S_BESTAETIGEN: lcd.print("Richtig?     ");break;
   }
+  lcd.setCursor(13,2);
+  lcd.print(typName(cubeTyp));
 }
 
 void printMenu(Status thestatus, byte i=0) {
@@ -178,7 +193,7 @@ void printzeit(const char*text, unsigned long zeit, byte zeile = 1) {
 }
 
 
-void showzeit(const char* msg, const byte pos) {
+void showZeit(const char* msg, const byte pos) {
 
   lcd.setCursor(0, 3);
 
@@ -241,15 +256,12 @@ void loeschePlatz(byte eplatz) {
 }
 
 void loadCubetype(){
-  switch(cubeTyp){
-    case TYP3x3: strncpy(top10Filename+5, "3X3", 3);break;
-    case TYP2x2: strncpy(top10Filename+5, "2X2", 3);break;
-    case TYPSQ1: strncpy(top10Filename+5, "SQ1", 3);break;
-  }
+  strncpy(top10Filename+5, typName(cubeTyp),3);
   lcd.setCursor(0,0);
   lcd.print(top10Filename);
-  delay(1500);
+  EEPROM.write(EEPROM_CUBETYPE, cubeTyp);
   readSDStatus();
+  delay(800);
 }
 
 void zeigeTop10() {
@@ -327,7 +339,7 @@ void auswerteSettingsPins(byte links, byte rechts, byte ok) {
         rtc.setDate(time.date, time.mon, time.year);
         lcd.setCursor(8,2);
         lcd.print(time.year);
-        showzeit("Jahr:", 5);
+        showZeit("Jahr:", 5);
 
         break;
       }
@@ -338,7 +350,7 @@ void auswerteSettingsPins(byte links, byte rechts, byte ok) {
         }
         auswertePlusMinus(links, rechts, time.mon);
         rtc.setDate(time.date, time.mon, time.year);
-        showzeit("Monat:", 5);
+        showZeit("Monat:", 5);
 
         break;
       }
@@ -349,7 +361,7 @@ void auswerteSettingsPins(byte links, byte rechts, byte ok) {
         }
         auswertePlusMinus(links, rechts, time.date);
         rtc.setDate(time.date, time.mon, time.year);
-        showzeit("Tag:", 2);
+        showZeit("Tag:", 2);
 
         break;
       }
@@ -360,7 +372,7 @@ void auswerteSettingsPins(byte links, byte rechts, byte ok) {
         }
         auswertePlusMinus(links, rechts, time.hour);
         rtc.setTime(time.hour, time.min, 0);
-        showzeit("Stunde:", 8);
+        showZeit("Stunde:", 8);
         break;
       }
       if (zeitSetzeTyp == ZEIT_MINUTE) {
@@ -370,7 +382,7 @@ void auswerteSettingsPins(byte links, byte rechts, byte ok) {
         }        
         auswertePlusMinus(links, rechts, time.min);
         rtc.setTime(time.hour, time.min, 0);
-        showzeit("Minute:", 12);
+        showZeit("Minute:", 12);
 
         break;
       }
@@ -378,7 +390,7 @@ void auswerteSettingsPins(byte links, byte rechts, byte ok) {
 
     case SET_SHOWZEIT:
       lcd.clear();
-      showzeit("Zeit:", 0);
+      showZeit("Zeit:", 0);
       if (ok == 0) {
         settingStatus = SET_MENU;
         break;
@@ -608,6 +620,10 @@ void readSDStatus() {
         // Serial.print("inhalt: "); Serial.println(bestenListe[zeileNr]);
         zeileNr++;
       }
+      while(zeileNr <= BESTENLAENGE){
+        bestenListe[zeileNr] = 0;
+        zeileNr++;
+      }
       top10File.close();
     }
 
@@ -622,6 +638,9 @@ void setup() {
   digitalWrite(SDPIN, 1);
   lcd.backlight();
   lcd.begin(16, 4);
+  
+  cubeTyp = EEPROM.read(EEPROM_CUBETYPE);
+
   delay(20);
 
   // Initialize the rtc object
@@ -648,6 +667,8 @@ void setup() {
     lcd.setCursor(14, 0);
     lcd.print("SD");
   }
+
+  time = rtc.getTime();
 
   bestaetigen[4] = 225;
   ungueltig[3]  = 245;
@@ -694,7 +715,7 @@ void setup() {
   pinMode(SETTINGSCHALTER, INPUT);
   digitalWrite(SETTINGSCHALTER, 1);
 
-  showzeit(0, 0);
+  showZeit(0, 0);
 }
 
 void beep1() {
@@ -841,6 +862,15 @@ void loop() {
     }
   }
 
+  if((! istSettings && status==S_BEREIT 
+     || istSettings && settingStatus == SET_SHOWZEIT)
+     && naechsteZeigeZeit < jetzt
+     )
+  {
+    showZeit(0,0);
+    naechsteZeigeZeit += 500;
+  }
+
   if (statusWechsel) {
     printStatus(status);
     if (status == S_BESTAETIGEN ) {
@@ -879,10 +909,6 @@ void loop() {
     printStatus(S_BEREIT);
     status = S_BEREIT;
     endeAnschauen = 0;
-  }
-  if (jetzt - lastzeit > 1000) {
-    lastzeit = jetzt;
-    // showzeit();
   }
   //  */
 }
