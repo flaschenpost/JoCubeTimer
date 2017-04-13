@@ -9,7 +9,7 @@
 
 #define SETTINGSCHALTER A0
 
-#define BLOCKZEIT 250
+#define BLOCKZEIT 150
 
 #define START1_BEEP_ZEIT 7000
 #define START1_END_ZEIT 10000
@@ -33,8 +33,8 @@
 
 #define SDPIN 1
 
-const char* top10Filename = "JOTOP10.TXT";
-const char* logFilename = "JOLOG.TXT";
+char* top10Filename = "JOTOP3X3.TXT";
+const char* logFilename = "JOLOG";
 
 unsigned long bestenListe[BESTENLAENGE + 1] = {0};
 
@@ -46,15 +46,17 @@ byte hasSDCard = 0;
 
 
 // in welchem Status sind wir?
-enum Status {S_BEREIT, S_START1, S_ANSCHAUEN, S_PIEP, S_START2, S_LOESEN, S_ANZEIGE, S_ZUSPAET, S_BESTAETIGEN} status = S_BEREIT;
+enum Status {S_BEREIT, S_START1, S_ANSCHAUEN, S_PIEP, S_START2, S_LOESEN, S_ZUSPAET, S_BESTAETIGEN} status = S_BEREIT;
 
 // in welchem SettingStatus sind wir?
-enum SettingStatus {SET_TOP10, SET_MENU, SET_LOESCHEN, SET_TON, SET_ZEIT} settingStatus = SET_TOP10;
+enum SettingStatus {SET_TOP10, SET_MENU, SET_LOESCHEN, SET_TON, SET_SHOWZEIT, SET_TYP, SET_AENDERE_ZEIT} settingStatus = SET_TOP10;
 
-enum MenueEintrag {MENU_ZEIGETOP10, MENU_LOESCHEN, MENU_TON, MENU_ZEIT, MENU_ENDE} aktiverEintrag = MENU_ZEIGETOP10;
+enum MENUEEINTRAG {MENU_ZEIGETOP10, MENU_LOESCHEN, MENU_TON, MENU_ZEIT, MENU_TYP, MENU_ENDE} aktiverEintrag = MENU_ZEIGETOP10;
 
+enum ZEIT_SETZE_TYP {ZEIT_JAHR, ZEIT_MONAT, ZEIT_TAG, ZEIT_STUNDE, ZEIT_MINUTE, ZEIT_OK} zeitSetzeTyp = ZEIT_JAHR;
 unsigned int referenzLinks, referenzRechts, referenzOK;     //reference values to remove offset
 
+enum CUBETYP {TYP3x3, TYP2x2, TYPSQ1, TYPENDE} cubeTyp = TYP3x3;
 #define   BACKLIGHT_PIN  7
 LiquidCrystal lcd(9, 8, 7, 6, 5, 4, BACKLIGHT_PIN, POSITIVE );
 
@@ -82,9 +84,7 @@ unsigned long startLoesen = 0;
 unsigned long anzeigeLoesen = 0;
 unsigned long loeseZeit = 0;
 
-unsigned long sperrZeit = 0;
-
-
+Time time;
 
 char *startloesen = "Start l.sen    ";
 char *loesen      = "l.sen          ";
@@ -97,33 +97,59 @@ byte istSettings = 0;
 
 byte istStumm = 0;
 
-const char* menueText(MenueEintrag eintrag) {
-  switch (eintrag) {
-    case MENU_ZEIGETOP10:      return "Top10         ";
-    case MENU_LOESCHEN:        return loeschen;
-    case MENU_TON:             return "Ton           ";
-    case MENU_ZEIT:            return "Zeit          ";
-    case MENU_ENDE:            return "--------------";
+void printTyp(CUBETYP typ, byte i=0){
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("Typ");
+  lcd.setCursor(0, i);
+  switch(typ){
+    case TYP3x3: lcd.print("3x3    ");break;
+    case TYP2x2: lcd.print("2x2    ");break;
+    case TYPSQ1: lcd.print("Square1");break;
   }
 }
 
-const char* statusText(Status thestatus) {
+void printStatus(Status thestatus, byte i=0) {
+  lcd.setCursor(0, i);
   switch (thestatus) {
-    case S_BEREIT:     return "Bereit         ";
-    case S_START1:     return "Start Anschau  ";
-    case S_ANSCHAUEN:  return "Anschauen      ";
-    case S_PIEP:       return "Schnell!!      ";
-    case S_START2:     return startloesen;
-    case S_LOESEN:     return loesen;
-    case S_ANZEIGE:    return "Fertig         ";
-    case S_ZUSPAET:    return "Schade!        ";
-    case S_BESTAETIGEN: return "Richtig?       ";
+    case S_BEREIT:     lcd.print( "Bereit         ");break;
+    case S_START1:     lcd.print( "Start Anschau  ");break;
+    case S_ANSCHAUEN:  lcd.print( "Anschauen      ");break;
+    case S_PIEP:       lcd.print( "Schnell!!      ");break;
+    case S_START2:     lcd.print(startloesen);break;
+    case S_LOESEN:     lcd.print(loesen);break;
+    case S_ZUSPAET:    lcd.print( "Schade!        ");break;
+    case S_BESTAETIGEN: lcd.print( "Richtig?       ");break;
   }
 }
-void printstatus(Status thestatus) {
-  lcd.setCursor(0, 0);
-  lcd.print(statusText(thestatus));
+
+void printMenu(Status thestatus, byte i=0) {
+  lcd.setCursor(0, i);
+  switch (thestatus) {
+    case MENU_ZEIGETOP10:      lcd.print("Top10         ");break;
+    case MENU_LOESCHEN:        lcd.print(loeschen);break;
+    case MENU_TON:             lcd.print("Ton           ");break;
+    case MENU_ZEIT:            lcd.print("Zeit          ");break;
+    case MENU_TYP:             lcd.print("Typ           ");break;
+    case MENU_ENDE:            lcd.print("--------------");break;
+  }
 }
+
+void writeSDStatus() {
+  File top10File = SD.open(top10Filename, FILE_WRITE);
+  if (top10File) {
+    top10File.seek(0);
+    for (int i = 0; i < BESTENLAENGE; i++) {
+      top10File.println(bestenListe[i]);
+      // Serial.print("SD::written "); Serial.println(bestenListe[i]);
+    }
+    top10File.close();
+    lcd.setCursor(13, 0);
+    lcd.print("WSD");
+
+  }
+}
+
 
 void printzeit(const char*text, unsigned long zeit, byte zeile = 1) {
   if (text > 0) {
@@ -147,11 +173,33 @@ void printzeit(const char*text, unsigned long zeit, byte zeile = 1) {
   lcd.setCursor(12 - laenge, zeile);
   lcd.print(sekunden);
   lcd.print(",");
-  int teil = (zeit % 1000l) / 10;
+  int teil = (zeit % 1000l) ;
   lcd.print(teil); lcd.print(" ");
 }
 
 
+void showzeit(const char* msg, const byte pos) {
+
+  lcd.setCursor(0, 3);
+
+  // Send date
+  lcd.print(rtc.getDateStr(FORMAT_XS));
+  lcd.print(" ");
+  // Send zeit
+  lcd.print(rtc.getTimeStr(FORMAT_LONG));
+  if (msg > 0) {
+    lcd.setCursor(0, 2);
+    lcd.print(msg);
+  }
+  if (pos > 0) {
+    lcd.setCursor(pos, 3);
+    lcd.blink();
+  }
+  else {
+    lcd.noBlink();
+  }
+
+}
 
 byte zeitEinfuegen(unsigned long zeit) {
   byte eplatz = 0;
@@ -192,6 +240,18 @@ void loeschePlatz(byte eplatz) {
   writeSDStatus();
 }
 
+void loadCubetype(){
+  switch(cubeTyp){
+    case TYP3x3: strncpy(top10Filename+5, "3X3", 3);break;
+    case TYP2x2: strncpy(top10Filename+5, "2X2", 3);break;
+    case TYPSQ1: strncpy(top10Filename+5, "SQ1", 3);break;
+  }
+  lcd.setCursor(0,0);
+  lcd.print(top10Filename);
+  delay(1500);
+  readSDStatus();
+}
+
 void zeigeTop10() {
   char* comment = "Platz  1";
   for (byte i = 0; i < 4; i++) {
@@ -209,9 +269,7 @@ void zeigeTop10() {
 void zeigeMenue() {
   lcd.clear();
   for (int i = 0; i < 4; i++) {
-    char *eintrag = menueText((aktiverEintrag + i) % (MENU_ENDE + 1));
-    lcd.setCursor(0, i);
-    lcd.print(eintrag);
+    printMenu((aktiverEintrag + i) % (MENU_ENDE + 1), i);
   }
 }
 
@@ -225,13 +283,127 @@ void zeigeStummEinstellung() {
   }
 }
 
+inline byte auswertePlusMinus(byte links, byte rechts, unsigned int &wert) {
+  if (links == 0) {
+    wert--;
+    return;
+  }
+  if (rechts == 0) {
+    wert++;
+    return;
+  }
+}
+inline byte auswertePlusMinus(byte links, byte rechts, byte &wert) {
+  if (links == 0) {
+    wert--;
+    return;
+  }
+  if (rechts == 0) {
+    wert++;
+    return;
+  }
+}
+
 void auswerteSettingsPins(byte links, byte rechts, byte ok) {
 
   switch (settingStatus) {
-    case SET_ZEIT:
+    case SET_AENDERE_ZEIT:
+      if (time.year == 0) {
+        time.year = 2017;
+      }
+      if (zeitSetzeTyp == ZEIT_OK && ok == 0) {
+        rtc.setTime(time.hour, time.min, 0);
+        rtc.setDate(time.date, time.mon, time.year);
+        zeitSetzeTyp = ZEIT_JAHR;
+        settingStatus = SET_SHOWZEIT;
+        break;
+      }
+      if (zeitSetzeTyp == ZEIT_JAHR) {
+        if (ok == 0) {
+          zeitSetzeTyp = ZEIT_MONAT;
+          break;
+        }
+        auswertePlusMinus(links, rechts, time.year);
+        rtc.setDate(time.date, time.mon, time.year);
+        lcd.setCursor(8,2);
+        lcd.print(time.year);
+        showzeit("Jahr:", 5);
+
+        break;
+      }
+      if (zeitSetzeTyp == ZEIT_MONAT) {
+        if (ok == 0) {
+          zeitSetzeTyp = ZEIT_TAG;
+          break;
+        }
+        auswertePlusMinus(links, rechts, time.mon);
+        rtc.setDate(time.date, time.mon, time.year);
+        showzeit("Monat:", 5);
+
+        break;
+      }
+      if (zeitSetzeTyp == ZEIT_TAG) {
+        if (ok == 0) {
+          zeitSetzeTyp = ZEIT_STUNDE;
+          break;
+        }
+        auswertePlusMinus(links, rechts, time.date);
+        rtc.setDate(time.date, time.mon, time.year);
+        showzeit("Tag:", 2);
+
+        break;
+      }
+      if (zeitSetzeTyp == ZEIT_STUNDE) {
+        if (ok == 0) {
+          zeitSetzeTyp = ZEIT_MINUTE;
+          break;
+        }
+        auswertePlusMinus(links, rechts, time.hour);
+        rtc.setTime(time.hour, time.min, 0);
+        showzeit("Stunde:", 8);
+        break;
+      }
+      if (zeitSetzeTyp == ZEIT_MINUTE) {
+        if (ok == 0) {
+          zeitSetzeTyp = ZEIT_OK;
+          break;
+        }        
+        auswertePlusMinus(links, rechts, time.min);
+        rtc.setTime(time.hour, time.min, 0);
+        showzeit("Minute:", 12);
+
+        break;
+      }
+      break;
+
+    case SET_SHOWZEIT:
       lcd.clear();
-      showzeit();
+      showzeit("Zeit:", 0);
       if (ok == 0) {
+        settingStatus = SET_MENU;
+        break;
+      }
+      if (links == 0 || rechts == 0) {
+        Time time = rtc.getTime();
+        if (time.year == 0) {
+          time.year = 2017;
+        }
+        settingStatus = SET_AENDERE_ZEIT;
+        break;
+      }
+      break;
+    case SET_TYP:
+      printTyp(cubeTyp,1);
+      if (rechts == 0){
+        cubeTyp = (cubeTyp + 1 ) % (TYPENDE);
+        break;
+      }
+      if (links == 0){
+        cubeTyp = (cubeTyp - 1 + TYPENDE ) % (TYPENDE);
+        break;
+      }
+      if (ok == 0) {
+        loadCubetype();
         settingStatus = SET_MENU;
       }
       break;
@@ -264,10 +436,10 @@ void auswerteSettingsPins(byte links, byte rechts, byte ok) {
       break;
     case SET_LOESCHEN:
       if (ok == 0) {
-        loeschePlatz(listeOben+1);
+        loeschePlatz(listeOben + 1);
 
         zeigeTop10();
-        settingStatus=SET_MENU;
+        settingStatus = SET_MENU;
         break;
       }
       if (links == 0) {
@@ -302,12 +474,22 @@ void auswerteSettingsPins(byte links, byte rechts, byte ok) {
             zeigeStummEinstellung();
             break;
           case MENU_ZEIT:
-            settingStatus = SET_ZEIT;
-            return "Zeit          ";
-          case MENU_ENDE:            return "--------------";
+            settingStatus = SET_SHOWZEIT;
+            break;
+          case MENU_TYP:
+            settingStatus = SET_TYP;
+            break;
+          case MENU_ENDE:
+            break;
         }
       }
       zeigeMenue();
+      break;
+    default:
+      settingStatus = SET_MENU;
+      zeigeMenue();
+      break;
+
   }
 }
 
@@ -363,7 +545,6 @@ void auswerteSpielePins(unsigned long jetzt, byte links, byte rechts, byte ok) {
         blockiertOK = jetzt + BLOCKZEIT;
         blockiertRechts = jetzt + 5 * BLOCKZEIT;
         blockiertLinks = jetzt + 5 * BLOCKZEIT;
-        sperrZeit = jetzt + 500;
         // Serial.print("jetzt=");Serial.print(jetzt);Serial.print(" ");Serial.println(blockiertOK);
       }
       break;
@@ -373,7 +554,6 @@ void auswerteSpielePins(unsigned long jetzt, byte links, byte rechts, byte ok) {
         lcd.setCursor(0, 1);
         lcd.print(ungueltig);
         statusWechsel = 1;
-        sperrZeit = jetzt + 500;
         status = S_BEREIT;
       }
       if (ok == 0) {
@@ -388,18 +568,13 @@ void auswerteSpielePins(unsigned long jetzt, byte links, byte rechts, byte ok) {
           lcd.print("          ");
         }
         statusWechsel = 1;
-        sperrZeit = jetzt + 500;
-        status = S_ANZEIGE;
+        status = S_BEREIT;
       }
 
-      //printzeit("FERTIG!",loeseZeit);
-      //Serial.println("LOESEN->S_ANZEIGE");
       break;
-    case S_ANZEIGE:
-      if (links == 0 && rechts == 0 && jetzt > sperrZeit) {
-        status = S_START1;
-        //Serial.println("S_ANZEIGE-> S_START1");
-      }
+    default:
+      status = S_BEREIT;
+      printStatus(status);
       break;
   }
 }
@@ -411,14 +586,14 @@ void readSDStatus() {
     File top10File = SD.open(top10Filename, FILE_READ);
 
     /*
-    if (top10File) {
-      Serial.println("dummy byte content:");
-      while (top10File.available()) {
-        Serial.print((char)top10File.read());
-      }
-      top10File.seek(0);
-    }
-    Serial.println("-----");
+       if (top10File) {
+       Serial.println("dummy byte content:");
+       while (top10File.available()) {
+       Serial.print((char)top10File.read());
+       }
+       top10File.seek(0);
+       }
+       Serial.println("-----");
     */
     if (top10File) {
       top10File.seek(0);
@@ -437,24 +612,9 @@ void readSDStatus() {
     }
 
   }
-   // else{
-   // Serial.println("not found!");
-   // }
-}
-
-void writeSDStatus() {
-  File top10File = SD.open(top10Filename, FILE_WRITE);
-  if (top10File) {
-    top10File.seek(0);
-    for (int i = 0; i < BESTENLAENGE; i++) {
-      top10File.println(bestenListe[i]);
-      // Serial.print("SD::written "); Serial.println(bestenListe[i]);
-    }
-    top10File.close();
-    lcd.setCursor(13, 0);
-    lcd.print("WSD");
-
-  }
+  // else{
+  // Serial.println("not found!");
+  // }
 }
 
 void setup() {
@@ -468,7 +628,7 @@ void setup() {
   rtc.begin();
   startloesen[7] = 239;
   loesen[1] = 239;
-  printstatus(S_BEREIT);
+  printStatus(S_BEREIT);
   geloest[3] = 239;
 
   loeschen[1] = 239;
@@ -493,20 +653,20 @@ void setup() {
   ungueltig[3]  = 245;
 
   /*
-    pinMode(1, OUTPUT);
-    digitalWrite(1,HIGH);
-    delay(200);
-    digitalWrite(1,LOW);
-    delay(200);
-    pinMode(1, INPUT);
-    if (!SD.begin(1)) {
-    lcd.setCursor(0,2);
-    lcd.print("NO SD");
-    }
-    else{
-    lcd.print("YEAH, SD");
-    }
-    delay(2000);
+     pinMode(1, OUTPUT);
+     digitalWrite(1,HIGH);
+     delay(200);
+     digitalWrite(1,LOW);
+     delay(200);
+     pinMode(1, INPUT);
+     if (!SD.begin(1)) {
+     lcd.setCursor(0,2);
+     lcd.print("NO SD");
+     }
+     else{
+     lcd.print("YEAH, SD");
+     }
+     delay(2000);
     // */
   // Serial.begin(38400);
   // while(!Serial){};
@@ -534,7 +694,7 @@ void setup() {
   pinMode(SETTINGSCHALTER, INPUT);
   digitalWrite(SETTINGSCHALTER, 1);
 
-  showzeit();
+  showzeit(0, 0);
 }
 
 void beep1() {
@@ -552,17 +712,6 @@ void beep2() {
   tone(LAUTSPRECHERPIN, BEEP2_FREQUENZ, BEEP2_LAENGE);
 }
 
-void showzeit() {
-
-  lcd.setCursor(0, 3);
-
-  // Send date
-  lcd.print(rtc.getDateStr(FORMAT_XS));
-  lcd.print(" ");
-  // Send zeit
-  lcd.print(rtc.getTimeStr(FORMAT_LONG));
-
-}
 
 int lastzeit = 0;
 
@@ -639,9 +788,9 @@ void loop() {
       statusLinks = nichtsLinks;
     }
     /*
-      lcd.setCursor(0,1);lcd.print(nichtsLinks);
-      lcd.setCursor(0,2);lcd.print(raisedl);
-      lcd.setCursor(0,3);lcd.print(wert);
+       lcd.setCursor(0,1);lcd.print(nichtsLinks);
+       lcd.setCursor(0,2);lcd.print(raisedl);
+       lcd.setCursor(0,3);lcd.print(wert);
       // */
   }
 
@@ -654,9 +803,9 @@ void loop() {
       statusRechts = nichtsRechts;
     }
     /*
-      lcd.setCursor(8,1);lcd.print(nichtsRechts);
-      lcd.setCursor(8,2);lcd.print(raisedr);
-      lcd.setCursor(8,3);lcd.print(wert);
+       lcd.setCursor(8,1);lcd.print(nichtsRechts);
+       lcd.setCursor(8,2);lcd.print(raisedr);
+       lcd.setCursor(8,3);lcd.print(wert);
       // */
   }
 
@@ -693,8 +842,8 @@ void loop() {
   }
 
   if (statusWechsel) {
-    printstatus(status);
-    if (status == S_BESTAETIGEN || status == S_ANZEIGE) {
+    printStatus(status);
+    if (status == S_BESTAETIGEN ) {
       printzeit(geloest, loeseZeit);
     }
     if (status == S_LOESEN ) {
@@ -706,7 +855,7 @@ void loop() {
   if (status == S_ANSCHAUEN && jetzt > beepAnschauen) {
     beep1();
     status = S_PIEP;
-    printstatus(S_PIEP);
+    printStatus(S_PIEP);
     beepAnschauen += 900;
   }
   if (status == S_PIEP && jetzt > beepAnschauen) {
@@ -715,7 +864,7 @@ void loop() {
   }
   if (status == S_PIEP && jetzt > endeAnschauen) {
     //Serial.println("Abbrechen...");
-    printstatus(S_ZUSPAET);
+    printStatus(S_ZUSPAET);
     status = S_ZUSPAET;
     endeAnschauen = endeAnschauen + 2000;
     beep3();
@@ -727,7 +876,7 @@ void loop() {
     anzeigeLoesen += AKTUALISIEREN;
   }
   if (status == S_ZUSPAET && jetzt > endeAnschauen) {
-    printstatus(S_BEREIT);
+    printStatus(S_BEREIT);
     status = S_BEREIT;
     endeAnschauen = 0;
   }
