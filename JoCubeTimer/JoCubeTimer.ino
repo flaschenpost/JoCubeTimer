@@ -39,7 +39,6 @@
 unsigned long naechsteZeigeZeit = 0;
 
 const char* top10Filename = "JOTOP3X3.TXT";
-const char* logFilename = "JOLOG";
 
 unsigned long bestenListe[BESTENLAENGE + 1] = {0};
 
@@ -55,9 +54,9 @@ SdFat sd;
 enum Status {S_BEREIT, S_START1, S_ANSCHAUEN, S_PIEP, S_START2, S_LOESEN, S_ZUSPAET, S_BESTAETIGEN} status = S_BEREIT;
 
 // in welchem SettingStatus sind wir?
-enum SettingStatus {SET_TOP10, SET_MENU, SET_LOESCHEN, SET_TON, SET_SHOWZEIT, SET_TYP, SET_AENDERE_ZEIT, SET_LOGFILE} settingStatus = SET_TOP10;
+enum SettingStatus {SET_TOP10, SET_MENU, SET_LOESCHEN, SET_TON, SET_SHOWZEIT, SET_TYP, SET_AENDERE_ZEIT} settingStatus = SET_TOP10;
 
-enum MENUEEINTRAG {MENU_ZEIGETOP10, MENU_LOESCHEN, MENU_TON, MENU_ZEIT, MENU_TYP, MENU_LOGFILE, MENU_ENDE} aktiverEintrag = MENU_ZEIGETOP10;
+enum MENUEEINTRAG {MENU_ZEIGETOP10, MENU_LOESCHEN, MENU_TON, MENU_ZEIT, MENU_TYP, MENU_ENDE} aktiverEintrag = MENU_ZEIGETOP10;
 
 enum ZEIT_SETZE_TYP {ZEIT_JAHR, ZEIT_MONAT, ZEIT_TAG, ZEIT_STUNDE, ZEIT_MINUTE, ZEIT_OK} zeitSetzeTyp = ZEIT_JAHR;
 unsigned int referenzLinks, referenzRechts, referenzOK;     //reference values to remove offset
@@ -150,7 +149,6 @@ void printMenu(Status thestatus, byte i=0) {
     case MENU_TON:             lcd.print("Ton           ");break;
     case MENU_ZEIT:            lcd.print("Zeit          ");break;
     case MENU_TYP:             lcd.print("Typ           ");break;
-    case MENU_LOGFILE:         lcd.print("Logfile       ");break;
     case MENU_ENDE:            lcd.print("--------------");break;
   }
 }
@@ -191,7 +189,6 @@ void logbuchSchreiben(unsigned long zeit){
     logFile.close();
   }
 }
-
 
 
 void printzeit(const char*text, unsigned long zeit, byte zeile = 1) {
@@ -266,9 +263,6 @@ byte zeitEinfuegen(unsigned long zeit) {
     printzeit("To BEAT: ", zeit , 3);
   }
   writeSDStatus();
-  if(eplatz < 6){
-    logbuchSchreiben(zeit);
-  }
   return eplatz;
 }
 
@@ -286,17 +280,19 @@ void loeschePlatz(byte eplatz) {
   writeSDStatus();
 }
 
-void loadCubetype(){
+void loadCubetype(byte writeEEPROM=0){
   switch(cubeTyp){
     case TYP3x3: strncpy(top10Filename+5, "3X3", 3);break;
     case TYP2x2: strncpy(top10Filename+5, "2X2", 3);break;
     case TYPSQ1: strncpy(top10Filename+5, "SQ1", 3);break;
   }
-  lcd.setCursor(0,0);
-  lcd.print(top10Filename);
-  EEPROM.write(EEPROM_CUBETYPE, cubeTyp);
+  if(writeEEPROM){
+    lcd.setCursor(0,0);
+    lcd.print(top10Filename);
+    EEPROM.write(EEPROM_CUBETYPE, cubeTyp);
+    delay(800);
+  }
   readSDStatus();
-  delay(800);
 }
 
 void zeigeTop10() {
@@ -371,7 +367,6 @@ inline void zeigeLogbuch(){
     }
   }
 }
-
 
 void auswerteSettingsPins(byte links, byte rechts, byte ok) {
 
@@ -469,7 +464,7 @@ void auswerteSettingsPins(byte links, byte rechts, byte ok) {
         break;
       }
       if (ok == 0) {
-        loadCubetype();
+        loadCubetype(1);
         settingStatus = SET_MENU;
       }
       break;
@@ -488,23 +483,6 @@ void auswerteSettingsPins(byte links, byte rechts, byte ok) {
         aktiverEintrag = MENU_ZEIGETOP10;
 
         zeigeMenue();
-        break;
-      }
-      if (links == 0) {
-        listeOben = (BESTENLAENGE + listeOben - 1) % BESTENLAENGE;
-        break;
-      }
-      if (rechts == 0) {
-        listeOben = (BESTENLAENGE + listeOben + 1) % BESTENLAENGE;
-        break;
-      }
-      zeigeTop10();
-      break;
-    case SET_LOGFILE:
-      if (ok == 0) {
-        settingStatus = SET_MENU;
-        aktiverEintrag = MENU_ZEIGETOP10;
-
         break;
       }
       if (links == 0) {
@@ -561,10 +539,6 @@ void auswerteSettingsPins(byte links, byte rechts, byte ok) {
             break;
           case MENU_TYP:
             settingStatus = SET_TYP;
-            break;
-          case MENU_LOGFILE:
-            settingStatus = SET_LOGFILE;
-            zeigeLogbuch();
             break;
           case MENU_ENDE:
             break;
@@ -706,6 +680,7 @@ void setup() {
   lcd.begin(16, 4);
   
   cubeTyp = EEPROM.read(EEPROM_CUBETYPE);
+  loadCubetype(0);
 
   delay(50);
 
