@@ -1,7 +1,7 @@
 #include <ADCTouch.h>
 #include <LiquidCrystal.h>
 #include <DS3231.h>
-#include <SD.h>
+#include <SdFat.h>
 #include <EEPROM.h>
 
 #define OKPAD    A1
@@ -49,6 +49,7 @@ byte platz = 0;
 byte listeOben = 0;
 byte hasSDCard = 0;
 
+SdFat sd;
 
 // in welchem Status sind wir?
 enum Status {S_BEREIT, S_START1, S_ANSCHAUEN, S_PIEP, S_START2, S_LOESEN, S_ZUSPAET, S_BESTAETIGEN} status = S_BEREIT;
@@ -155,17 +156,14 @@ void writeSDStatus() {
   if(! hasSDCard){
     return;
   }
-  File top10File = SD.open(top10Filename, FILE_WRITE);
+  ofstream top10File(top10Filename, ios_base::out);
   if (top10File) {
-    top10File.seek(0);
     for (int i = 0; i < BESTENLAENGE; i++) {
-      top10File.println(bestenListe[i]);
-      // Serial.print("SD::written "); Serial.println(bestenListe[i]);
+      top10File << bestenListe[i] << "\n";
     }
     top10File.close();
     lcd.setCursor(13, 0);
     lcd.print("SD");
-
   }
 }
 
@@ -173,11 +171,20 @@ void logbuchSchreiben(unsigned long zeit){
   if(! hasSDCard){
     return;
   }
-  File logFile = SD.open(logFilename, FILE_WRITE);
-  char rausZeile[50] = {0};
+  ofstream logFile(logFilename, ios_base::app);
   if (logFile) {
-    sprintf(rausZeile, "%s %s %s %5.3d\n", rtc.getDateStr(FORMAT_LONG), rtc.getTimeStr(FORMAT_LONG), cubeTyp, (double)zeit/1000);
-    logFile.println(rausZeile);
+    logFile << rtc.getDateStr(FORMAT_LONG)
+            << " "
+            << rtc.getTimeStr(FORMAT_LONG)
+            << " "
+            << cubeTyp
+            << " "
+            << setfill(' ') << setw(3) 
+            << (int)zeit/1000
+            << ","
+            << zeit%1000
+            << "\n"
+            ;
     logFile.close();
   }
 }
@@ -345,7 +352,7 @@ unsigned int logbuchZeile=0;
 
 inline void zeigeLogbuch(){
   String buffer;
-  File logFile = SD.open(logFilename, FILE_READ);
+  ifstream logFile(logFilename, ios_base::in);
   if (logFile) {
     int i=0;
     while (logFile.available()){
@@ -655,22 +662,11 @@ void auswerteSpielePins(unsigned long jetzt, byte links, byte rechts, byte ok) {
 
 void readSDStatus() {
   // Serial.print("called readSDStatus ");Serial.println(top10Filename);
-  if (SD.exists(top10Filename)) {
+  if (sd.exists(top10Filename)) {
     // Serial.print("exists");Serial.println(top10Filename);
-    File top10File = SD.open(top10Filename, FILE_READ);
+    ifstream top10File(top10Filename, ios_base::in);
 
-    /*
-       if (top10File) {
-       Serial.println("dummy byte content:");
-       while (top10File.available()) {
-       Serial.print((char)top10File.read());
-       }
-       top10File.seek(0);
-       }
-       Serial.println("-----");
-    */
     if (top10File) {
-      top10File.seek(0);
       int zeileNr = 0;
       while (top10File.available()) {
         char zeile[20] = {0};
@@ -707,7 +703,7 @@ void setup() {
   
   cubeTyp = EEPROM.read(EEPROM_CUBETYPE);
 
-  delay(200);
+  delay(50);
 
   // Initialize the rtc object
   rtc.begin();
@@ -727,37 +723,10 @@ void setup() {
     }
   }
 
-  if (SD.begin(SDPIN)) {
-    hasSDCard = 1;
-    readSDStatus();
-    lcd.setCursor(14, 0);
-    lcd.print("SD");
-  }
-
   time = rtc.getTime();
 
   bestaetigen[4] = 225;
   ungueltig[3]  = 245;
-
-  /*
-     pinMode(1, OUTPUT);
-     digitalWrite(1,HIGH);
-     delay(200);
-     digitalWrite(1,LOW);
-     delay(200);
-     pinMode(1, INPUT);
-     if (!SD.begin(1)) {
-     lcd.setCursor(0,2);
-     lcd.print("NO SD");
-     }
-     else{
-     lcd.print("YEAH, SD");
-     }
-     delay(2000);
-    // */
-  // Serial.begin(38400);
-  // while(!Serial){};
-  // Serial.println("OK, Start!");
 
 
   // dummy first reference creation seems to give other results on battery power
@@ -776,7 +745,17 @@ void setup() {
   referenzLinks += sensorSchwelle;
   referenzRechts += sensorSchwelle;
   referenzOK += sensorSchwelle / 3;
-  delay(100);
+
+  if (sd.begin(chipSelect, SPI_QUARTER_SPEED)) {
+    hasSDCard = 1;
+    readSDStatus();
+    lcd.setCursor(14, 0);
+    lcd.print("SD");
+  }
+  else{
+    sd.initErrorHalt();
+  }
+
 
   pinMode(SETTINGSCHALTER, INPUT);
   digitalWrite(SETTINGSCHALTER, 1);
