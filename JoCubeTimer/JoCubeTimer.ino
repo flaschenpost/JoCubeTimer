@@ -63,6 +63,9 @@ enum ZEIT_SETZE_TYP {ZEIT_JAHR, ZEIT_MONAT, ZEIT_TAG, ZEIT_STUNDE, ZEIT_MINUTE, 
 unsigned int referenzLinks, referenzRechts, referenzOK;     //reference values to remove offset
 
 enum CUBETYP {TYP3x3, TYP2x2, TYPSQ1, TYPENDE} cubeTyp = TYP3x3;
+
+char zeile[50] = {0};
+
 #define   BACKLIGHT_PIN  7
 LiquidCrystal lcd(9, 8, 7, 6, 5, 4, BACKLIGHT_PIN, POSITIVE );
 
@@ -355,13 +358,16 @@ inline void zeigeLogbuch(){
   ifstream logFile(logFilename, ios_base::in);
   if (logFile) {
     int i=0;
-    while (logFile.available()){
-      buffer = logFile.readStringUntil('\n');
+    while (logFile.getline(zeile, 48) > 0){
+      i++;
       if(i<logbuchZeile){
         continue;
       }
       lcd.setCursor(0,0);
       lcd.print(buffer);
+      if(i>logbuchZeile+3){
+        break;
+      }
     }
   }
 }
@@ -668,9 +674,7 @@ void readSDStatus() {
 
     if (top10File) {
       int zeileNr = 0;
-      while (top10File.available()) {
-        char zeile[20] = {0};
-        top10File.readBytesUntil(0x0a, zeile, 19);
+      while (zeileNr < BESTENLAENGE && top10File.getline(zeile, 48) > 0){
         // Serial.print("Zeile ");Serial.println(zeile);
         String szeile(zeile);
         // Serial.print("String Zeile "); Serial.println(szeile);
@@ -746,7 +750,7 @@ void setup() {
   referenzRechts += sensorSchwelle;
   referenzOK += sensorSchwelle / 3;
 
-  if (sd.begin(chipSelect, SPI_QUARTER_SPEED)) {
+  if (sd.begin(SDPIN, SPI_QUARTER_SPEED)) {
     hasSDCard = 1;
     readSDStatus();
     lcd.setCursor(14, 0);
