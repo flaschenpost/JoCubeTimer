@@ -24,7 +24,7 @@
 #define BEEP3_FREQUENZ 1190
 #define BEEP3_LAENGE 50
 
-#define AKTUALISIEREN 100
+#define AKTUALISIEREN 200
 
 #define LAUTSPRECHERPIN A10
 
@@ -39,6 +39,7 @@
 unsigned long naechsteZeigeZeit = 0;
 
 const char* top10Filename = "JOTOP3X3.TXT";
+const char* logFilename = "JOLOGS4.TXT";
 
 unsigned long bestenListe[BESTENLAENGE + 1] = {0};
 
@@ -54,9 +55,9 @@ SdFat sd;
 enum Status {S_BEREIT, S_START1, S_ANSCHAUEN, S_PIEP, S_START2, S_LOESEN, S_ZUSPAET, S_BESTAETIGEN} status = S_BEREIT;
 
 // in welchem SettingStatus sind wir?
-enum SettingStatus {SET_TOP10, SET_MENU, SET_LOESCHEN, SET_TON, SET_SHOWZEIT, SET_TYP, SET_AENDERE_ZEIT} settingStatus = SET_TOP10;
+enum SettingStatus {SET_TOP10, SET_MENU, SET_LOESCHEN, SET_TON, SET_SHOWZEIT, SET_TYP, SET_LOGFILE, SET_AENDERE_ZEIT} settingStatus = SET_TOP10;
 
-enum MENUEEINTRAG {MENU_ZEIGETOP10, MENU_LOESCHEN, MENU_TON, MENU_ZEIT, MENU_TYP, MENU_ENDE} aktiverEintrag = MENU_ZEIGETOP10;
+enum MENUEEINTRAG {MENU_ZEIGETOP10, MENU_LOESCHEN, MENU_TON, MENU_ZEIT, MENU_TYP, MENU_LOGFILE, MENU_ENDE} aktiverEintrag = MENU_ZEIGETOP10;
 
 enum ZEIT_SETZE_TYP {ZEIT_JAHR, ZEIT_MONAT, ZEIT_TAG, ZEIT_STUNDE, ZEIT_MINUTE, ZEIT_OK} zeitSetzeTyp = ZEIT_JAHR;
 unsigned int referenzLinks, referenzRechts, referenzOK;     //reference values to remove offset
@@ -149,6 +150,7 @@ void printMenu(Status thestatus, byte i=0) {
     case MENU_TON:             lcd.print("Ton           ");break;
     case MENU_ZEIT:            lcd.print("Zeit          ");break;
     case MENU_TYP:             lcd.print("Typ           ");break;
+    case MENU_LOGFILE:         lcd.print("Logfile       ");break;
     case MENU_ENDE:            lcd.print("--------------");break;
   }
 }
@@ -163,32 +165,37 @@ void writeSDStatus() {
       top10File << bestenListe[i] << "\n";
     }
     top10File.close();
-    lcd.setCursor(13, 0);
+    lcd.setCursor(14, 0);
     lcd.print("SD");
   }
 }
 
-void logbuchSchreiben(unsigned long zeit){
+void logbuchSchreiben(unsigned long zeit, int platz){
   if(! hasSDCard){
     return;
   }
   ofstream logFile(logFilename, ios_base::app);
   if (logFile) {
-    logFile << rtc.getDateStr(FORMAT_LONG)
+    logFile << " "
+            << rtc.getDateStr(FORMAT_SHORT)
             << " "
-            << rtc.getTimeStr(FORMAT_LONG)
+            << rtc.getTimeStr(FORMAT_SHORT)
+            << "\n"
+            << typName(cubeTyp)
             << " "
-            << cubeTyp
-            << " "
+            << platz
+            << ".Pl "
             << setfill(' ') << setw(3) 
-            << (int)zeit/1000
+            << zeit/1000l
             << ","
+            << setfill('0') << setw(3) 
             << zeit%1000
             << "\n"
             ;
     logFile.close();
   }
 }
+
 
 
 void printzeit(const char*text, unsigned long zeit, byte zeile = 1) {
@@ -263,6 +270,9 @@ byte zeitEinfuegen(unsigned long zeit) {
     printzeit("To BEAT: ", zeit , 3);
   }
   writeSDStatus();
+  if(eplatz < 6){
+    logbuchSchreiben(zeit, eplatz);
+  }
   return eplatz;
 }
 
@@ -350,20 +360,33 @@ inline byte auswertePlusMinus(byte links, byte rechts, byte &wert) {
 unsigned int logbuchZeile=0;
 
 inline void zeigeLogbuch(){
-  String buffer;
+  if(Serial && logbuchZeile==0){
+    ifstream logFileDump(logFilename, ios_base::in);
+    Serial.println("Bestenliste:");
+    while(logFileDump.getline(zeile, 48) > 0){
+      Serial.println(zeile);
+    }
+    logFileDump.close();
+  }
   ifstream logFile(logFilename, ios_base::in);
   if (logFile) {
     int i=0;
+    int j = 0;
+    lcd.clear();
     while (logFile.getline(zeile, 48) > 0){
       i++;
-      if(i<logbuchZeile){
+      if(i<=logbuchZeile){
         continue;
       }
-      lcd.setCursor(0,0);
-      lcd.print(buffer);
-      if(i>logbuchZeile+3){
+      lcd.setCursor(0,j);
+      lcd.print(zeile);
+      j++;
+      if(j>3){
         break;
       }
+    }
+    if(j < 4 && logbuchZeile > 0){
+      logbuchZeile--;
     }
   }
 }
@@ -495,6 +518,23 @@ void auswerteSettingsPins(byte links, byte rechts, byte ok) {
       }
       zeigeTop10();
       break;
+    case SET_LOGFILE:
+      if (ok == 0) {
+        settingStatus = SET_MENU;
+        aktiverEintrag = MENU_ZEIGETOP10;
+
+        break;
+      }
+      if (links == 0 && logbuchZeile > 0) {
+        logbuchZeile--;
+        break;
+      }
+      if (rechts == 0) {
+        logbuchZeile++;
+        break;
+      }
+      zeigeLogbuch();
+      break;
     case SET_LOESCHEN:
       if (ok == 0) {
         loeschePlatz(listeOben + 1);
@@ -539,6 +579,10 @@ void auswerteSettingsPins(byte links, byte rechts, byte ok) {
             break;
           case MENU_TYP:
             settingStatus = SET_TYP;
+            break;
+          case MENU_LOGFILE:
+            settingStatus = SET_LOGFILE;
+            zeigeLogbuch();
             break;
           case MENU_ENDE:
             break;
@@ -692,9 +736,9 @@ void setup() {
   geloest[3] = 239;
 
   loeschen[1] = 239;
-  if (0) {
+  if (1) {
     Serial.begin(9600);
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i < 100; i++) {
       if (Serial) {
         break;
       }
@@ -918,7 +962,7 @@ void loop() {
 
   if ((status == S_LOESEN) && anzeigeLoesen > 0 && anzeigeLoesen <= jetzt) {
     printzeit("Run      ", jetzt - startLoesen);
-    anzeigeLoesen += AKTUALISIEREN;
+    anzeigeLoesen = jetzt + AKTUALISIEREN;
   }
   if (status == S_ZUSPAET && jetzt > endeAnschauen) {
     printStatus(S_BEREIT);
