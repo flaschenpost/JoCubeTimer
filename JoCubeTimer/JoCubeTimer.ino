@@ -24,22 +24,21 @@
 #define BEEP3_FREQUENZ 1190
 #define BEEP3_LAENGE 50
 
-#define AKTUALISIEREN 200
+#define AKTUALISIEREN 190
 
 #define LAUTSPRECHERPIN A10
 
 #define BESTENLAENGE 10
 
-#define AUTOMATISCH_ABSCHALTEN 20000l
-
 #define SDPIN 1
 
 #define EEPROM_CUBETYPE 42
+#define EEPROM_ISTSTUMM 41
 
 unsigned long naechsteZeigeZeit = 0;
 
 const char* top10Filename = "JOTOP3X3.TXT";
-const char* logFilename = "JOLOGS4.TXT";
+const char* logFilename = "JOLOGS6.TXT";
 
 unsigned long bestenListe[BESTENLAENGE + 1] = {0};
 
@@ -95,68 +94,66 @@ unsigned long loeseZeit = 0;
 
 Time time;
 
-char *startloesen = "Start l.sen  ";
-char *loesen      = "l.sen        ";
-char *geloest     = "gel.st       ";
-char *loeschen    = "L.schen      ";
-char *bestaetigen = "Best.tigen   ";
-char *ungueltig   = "ung.ltig     ";
+char *loesen      = "l\357sen        ";
+char *geloest     = "gel\357st       ";
+char *loeschen    = "L\357schen      ";
+char *ungueltig   = "ung\365ltig     ";
 
 byte istSettings = 0;
 
 byte istStumm = 0;
 
-void printTyp(CUBETYP typ, byte i=0){
+void printTyp(CUBETYP typ, byte i = 0) {
   lcd.clear();
-  lcd.setCursor(0,0);
+  lcd.setCursor(0, 0);
   lcd.print("Typ");
   lcd.setCursor(0, i);
-  switch(typ){
-    case TYP3x3: lcd.print("3x3    ");break;
-    case TYP2x2: lcd.print("2x2    ");break;
-    case TYPSQ1: lcd.print("Square1");break;
+  switch (typ) {
+    case TYP3x3: lcd.print("3x3    "); break;
+    case TYP2x2: lcd.print("2x2    "); break;
+    case TYPSQ1: lcd.print("Square1"); break;
   }
 }
 
-char* typName(CUBETYP typ){
-  switch(cubeTyp){
-    case TYP3x3: return "3X3";
-    case TYP2x2: return "2X2";
+char* typName(CUBETYP typ) {
+  switch (cubeTyp) {
+    case TYP3x3: return "3x3";
+    case TYP2x2: return "2x2";
     case TYPSQ1: return "SQ1";
-  }  
+  }
 }
 
-void printStatus(Status thestatus, byte i=0) {
+void printStatus(Status thestatus, byte i = 0) {
   lcd.setCursor(0, i);
   switch (thestatus) {
-    case S_BEREIT:     lcd.print( "Bereit       ");break;
-    case S_START1:     lcd.print( "St. Anschau  ");break;
-    case S_ANSCHAUEN:  lcd.print( "Anschauen    ");break;
-    case S_PIEP:       lcd.print( "Schnell!!    ");break;
-    case S_START2:     lcd.print(startloesen);break;
-    case S_LOESEN:     lcd.print(loesen);break;
-    case S_ZUSPAET:    lcd.print( "Schade!      ");break;
-    case S_BESTAETIGEN: lcd.print("Richtig?     ");break;
+    case S_BEREIT:     lcd.print( "Bereit       "); break;
+    case S_START1:     lcd.print( "St. Anschau  "); break;
+    case S_ANSCHAUEN:  lcd.print( "Anschauen    "); break;
+    case S_PIEP:       lcd.print( "Schnell!!    "); break;
+    case S_START2:     lcd.print( "St. l\357sen    "); break;
+    case S_LOESEN:     lcd.print( "l\357sen        "); break;
+    case S_ZUSPAET:    lcd.print( "Schade!      "); break;
+    case S_BESTAETIGEN: lcd.print("Richtig?     "); break;
   }
-  lcd.setCursor(13,2);
+  lcd.setCursor(13, 2);
   lcd.print(typName(cubeTyp));
 }
 
-void printMenu(Status thestatus, byte i=0) {
+void printMenu(Status thestatus, byte i = 0) {
   lcd.setCursor(0, i);
   switch (thestatus) {
-    case MENU_ZEIGETOP10:      lcd.print("Top10         ");break;
-    case MENU_LOESCHEN:        lcd.print(loeschen);break;
-    case MENU_TON:             lcd.print("Ton           ");break;
-    case MENU_ZEIT:            lcd.print("Zeit          ");break;
-    case MENU_TYP:             lcd.print("Typ           ");break;
-    case MENU_LOGFILE:         lcd.print("Logfile       ");break;
-    case MENU_ENDE:            lcd.print("--------------");break;
+    case MENU_ZEIGETOP10:      lcd.print("Top10         "); break;
+    case MENU_LOESCHEN:        lcd.print(loeschen); break;
+    case MENU_TON:             lcd.print("Ton           "); break;
+    case MENU_ZEIT:            lcd.print("Zeit          "); break;
+    case MENU_TYP:             lcd.print("Typ           "); break;
+    case MENU_LOGFILE:         lcd.print("Logfile       "); break;
+    case MENU_ENDE:            lcd.print("--------------"); break;
   }
 }
 
 void writeSDStatus() {
-  if(! hasSDCard){
+  if (! hasSDCard) {
     return;
   }
   ofstream top10File(top10Filename, ios_base::out);
@@ -170,27 +167,28 @@ void writeSDStatus() {
   }
 }
 
-void logbuchSchreiben(unsigned long zeit, int platz){
-  if(! hasSDCard){
+void logbuchSchreiben(unsigned long zeit, int platz) {
+  if (! hasSDCard) {
     return;
   }
   ofstream logFile(logFilename, ios_base::app);
   if (logFile) {
-    logFile << " "
-            << rtc.getDateStr(FORMAT_SHORT)
-            << " "
-            << rtc.getTimeStr(FORMAT_SHORT)
-            << "\n"
-            << typName(cubeTyp)
-            << " "
+    logFile 
             << platz
             << ".Pl "
-            << setfill(' ') << setw(3) 
-            << zeit/1000l
+            << typName(cubeTyp)
+            << " "
+            << setfill(' ') << setw(3)
+            << zeit / 1000l
             << ","
-            << setfill('0') << setw(3) 
-            << zeit%1000
+            << setfill('0') << setw(3)
+            << zeit % 1000
             << "\n"
+            << "^"
+            << rtc.getDateStr(FORMAT_SHORT)
+            << "^"
+            << rtc.getTimeStr(FORMAT_SHORT)
+            << "^\n"
             ;
     logFile.close();
   }
@@ -205,7 +203,7 @@ void printzeit(const char*text, unsigned long zeit, byte zeile = 1) {
   }
   int laenge = 1;
   lcd.setCursor(8, zeile);
-  lcd.print("      ");
+  lcd.print("    ");
   unsigned long sekunden = zeit / 1000;
   if (sekunden >= 1000) {
     laenge = 3;
@@ -221,7 +219,7 @@ void printzeit(const char*text, unsigned long zeit, byte zeile = 1) {
   lcd.print(sekunden);
   lcd.print(",");
   int teil = (zeit % 1000l) ;
-  lcd.print(teil); lcd.print(" ");
+  lcd.print(teil);
 }
 
 
@@ -265,12 +263,8 @@ byte zeitEinfuegen(unsigned long zeit) {
     bestenListe[i] = bestenListe[i - 1];
   }
   bestenListe[eplatz - 1] = zeit;
-  if (eplatz == 1) {
-    // Serial.print("bestZeit: ");Serial.println(zeit);
-    printzeit("To BEAT: ", zeit , 3);
-  }
   writeSDStatus();
-  if(eplatz < 6){
+  if (eplatz < 6) {
     logbuchSchreiben(zeit, eplatz);
   }
   return eplatz;
@@ -290,14 +284,14 @@ void loeschePlatz(byte eplatz) {
   writeSDStatus();
 }
 
-void loadCubetype(byte writeEEPROM=0){
-  switch(cubeTyp){
-    case TYP3x3: strncpy(top10Filename+5, "3X3", 3);break;
-    case TYP2x2: strncpy(top10Filename+5, "2X2", 3);break;
-    case TYPSQ1: strncpy(top10Filename+5, "SQ1", 3);break;
+void loadCubetype(byte writeEEPROM = 0) {
+  switch (cubeTyp) {
+    case TYP3x3: strncpy(top10Filename + 5, "3X3", 3); break;
+    case TYP2x2: strncpy(top10Filename + 5, "2X2", 3); break;
+    case TYPSQ1: strncpy(top10Filename + 5, "SQ1", 3); break;
   }
-  if(writeEEPROM){
-    lcd.setCursor(0,0);
+  if (writeEEPROM) {
+    lcd.setCursor(0, 0);
     lcd.print(top10Filename);
     EEPROM.write(EEPROM_CUBETYPE, cubeTyp);
     delay(800);
@@ -357,36 +351,36 @@ inline byte auswertePlusMinus(byte links, byte rechts, byte &wert) {
   }
 }
 
-unsigned int logbuchZeile=0;
+unsigned int logbuchZeile = 0;
 
-inline void zeigeLogbuch(){
-  if(Serial && logbuchZeile==0){
+inline void zeigeLogbuch() {
+  if (Serial && logbuchZeile == 0) {
     ifstream logFileDump(logFilename, ios_base::in);
     Serial.println("Bestenliste:");
-    while(logFileDump.getline(zeile, 48) > 0){
+    while (logFileDump.getline(zeile, 48) > 0) {
       Serial.println(zeile);
     }
     logFileDump.close();
   }
   ifstream logFile(logFilename, ios_base::in);
   if (logFile) {
-    int i=0;
+    int i = 0;
     int j = 0;
     lcd.clear();
-    while (logFile.getline(zeile, 48) > 0){
+    while (logFile.getline(zeile, 48) > 0) {
       i++;
-      if(i<=logbuchZeile){
+      if (i <= logbuchZeile) {
         continue;
       }
-      lcd.setCursor(0,j);
+      lcd.setCursor(0, j);
       lcd.print(zeile);
       j++;
-      if(j>3){
+      if (j > 3) {
         break;
       }
     }
-    if(j < 4 && logbuchZeile > 0){
-      logbuchZeile--;
+    if (j < 4 && logbuchZeile > 1) {
+      logbuchZeile-= 2;
     }
   }
 }
@@ -398,22 +392,22 @@ void auswerteSettingsPins(byte links, byte rechts, byte ok) {
       if (time.year == 0) {
         time.year = 2017;
       }
-      switch(zeitSetzeTyp){
+      switch (zeitSetzeTyp) {
         case ZEIT_OK:
-          if(ok == 0) {
+          if (ok == 0) {
             rtc.setTime(time.hour, time.min, 0);
             rtc.setDate(time.date, time.mon, time.year);
             zeitSetzeTyp = ZEIT_JAHR;
             settingStatus = SET_SHOWZEIT;
           }
           break;
-        case ZEIT_JAHR: 
+        case ZEIT_JAHR:
           if (ok == 0) {
             zeitSetzeTyp = ZEIT_MONAT;
             break;
           }
           auswertePlusMinus(links, rechts, time.year);
-          lcd.setCursor(8,2);
+          lcd.setCursor(8, 2);
           lcd.print(time.year);
           showZeit("Jahr:", 5);
 
@@ -450,7 +444,7 @@ void auswerteSettingsPins(byte links, byte rechts, byte ok) {
           if (ok == 0) {
             zeitSetzeTyp = ZEIT_OK;
             break;
-          }        
+          }
           auswertePlusMinus(links, rechts, time.min);
           showZeit("Minute:", 12);
 
@@ -477,12 +471,12 @@ void auswerteSettingsPins(byte links, byte rechts, byte ok) {
       }
       break;
     case SET_TYP:
-      printTyp(cubeTyp,1);
-      if (rechts == 0){
+      printTyp(cubeTyp, 1);
+      if (rechts == 0) {
         cubeTyp = (cubeTyp + 1 ) % (TYPENDE);
         break;
       }
-      if (links == 0){
+      if (links == 0) {
         cubeTyp = (cubeTyp - 1 + TYPENDE ) % (TYPENDE);
         break;
       }
@@ -494,6 +488,7 @@ void auswerteSettingsPins(byte links, byte rechts, byte ok) {
     case SET_TON:
       if (rechts == 0 || links == 0) {
         istStumm = 1 - istStumm;
+        EEPROM.write(EEPROM_ISTSTUMM, istStumm);
       }
       if (ok == 0) {
         settingStatus = SET_MENU;
@@ -525,12 +520,12 @@ void auswerteSettingsPins(byte links, byte rechts, byte ok) {
 
         break;
       }
-      if (links == 0 && logbuchZeile > 0) {
-        logbuchZeile--;
+      if (links == 0 && logbuchZeile > 1) {
+        logbuchZeile-= 2;
         break;
       }
       if (rechts == 0) {
-        logbuchZeile++;
+        logbuchZeile+= 2 ;
         break;
       }
       zeigeLogbuch();
@@ -648,8 +643,8 @@ void auswerteSpielePins(unsigned long jetzt, byte links, byte rechts, byte ok) {
         beep4();
         jetzt = millis();
         blockiertOK = jetzt + BLOCKZEIT;
-        blockiertRechts = jetzt + 5 * BLOCKZEIT;
-        blockiertLinks = jetzt + 5 * BLOCKZEIT;
+        blockiertRechts = jetzt + 10 * BLOCKZEIT;
+        blockiertLinks = jetzt + 10 * BLOCKZEIT;
         // Serial.print("jetzt=");Serial.print(jetzt);Serial.print(" ");Serial.println(blockiertOK);
       }
       break;
@@ -657,7 +652,7 @@ void auswerteSpielePins(unsigned long jetzt, byte links, byte rechts, byte ok) {
       if (ok == 1 && (links == 0 && rechts == 0)) {
         // Serial.print("ungueltig / ");Serial.println(ungueltig);
         lcd.setCursor(0, 1);
-        lcd.print(ungueltig);
+        lcd.print("ung\365ltig        ");
         statusWechsel = 1;
         status = S_BEREIT;
       }
@@ -667,10 +662,18 @@ void auswerteSpielePins(unsigned long jetzt, byte links, byte rechts, byte ok) {
         lcd.setCursor(0, 2);
         if (platz > 0) {
           lcd.print("Platz: ");
+          if (platz < 10) {
+            lcd.print(" ");
+          }
           lcd.print(platz);
+
+          // Serial.print("bestZeit: ");Serial.println(zeit);
+          printzeit("To BEAT: ", bestenListe[0] , 3);
+
+
         }
         else {
-          lcd.print("          ");
+          lcd.print("         ");
         }
         statusWechsel = 1;
         status = S_BEREIT;
@@ -692,7 +695,7 @@ void readSDStatus() {
 
     if (top10File) {
       int zeileNr = 0;
-      while (zeileNr < BESTENLAENGE && top10File.getline(zeile, 48) > 0){
+      while (zeileNr < BESTENLAENGE && top10File.getline(zeile, 48) > 0) {
         // Serial.print("Zeile ");Serial.println(zeile);
         String szeile(zeile);
         // Serial.print("String Zeile "); Serial.println(szeile);
@@ -700,13 +703,13 @@ void readSDStatus() {
         // Serial.print("inhalt: "); Serial.println(bestenListe[zeileNr]);
         zeileNr++;
       }
-      lcd.setCursor(0,2);
+      lcd.setCursor(0, 2);
       lcd.print("load top10");
-      while(zeileNr < BESTENLAENGE){
+      while (zeileNr < BESTENLAENGE) {
         bestenListe[zeileNr] = 0;
         zeileNr++;
       }
-      lcd.setCursor(0,2);
+      lcd.setCursor(0, 2);
       lcd.print("            ");
       top10File.close();
     }
@@ -722,20 +725,17 @@ void setup() {
   digitalWrite(SDPIN, 1);
   lcd.backlight();
   lcd.begin(16, 4);
-  
+
   cubeTyp = EEPROM.read(EEPROM_CUBETYPE);
   loadCubetype(0);
+  istStumm = (EEPROM.read(EEPROM_ISTSTUMM) > 0 ? 1 : 0);
 
   delay(50);
 
   // Initialize the rtc object
   rtc.begin();
-  startloesen[7] = 239;
-  loesen[1] = 239;
   printStatus(S_BEREIT);
-  geloest[3] = 239;
 
-  loeschen[1] = 239;
   if (1) {
     Serial.begin(9600);
     for (int i = 0; i < 100; i++) {
@@ -747,10 +747,6 @@ void setup() {
   }
 
   time = rtc.getTime();
-
-  bestaetigen[4] = 225;
-  ungueltig[3]  = 245;
-
 
   // dummy first reference creation seems to give other results on battery power
   int dummy = ADCTouch.read(LINKSPAD, 80);  //create reference values to
@@ -775,7 +771,7 @@ void setup() {
     lcd.setCursor(14, 0);
     lcd.print("SD");
   }
-  else{
+  else {
     sd.initErrorHalt();
   }
 
@@ -902,7 +898,6 @@ void loop() {
     if (istSettings == 0) {
       istSettings = 1;
       lcd.clear();
-      lcd.setCursor(15, 0); lcd.print("S");
       settingStatus = SET_TOP10;
       status = S_BEREIT;
       auswerteSettingsPins(statusLinks, statusRechts, statusOK);
@@ -913,7 +908,6 @@ void loop() {
   if (digitalRead(SETTINGSCHALTER) == 1) {
     if (istSettings == 1) {
       lcd.clear();
-      lcd.setCursor(15, 0); lcd.print("P");
       settingStatus = SET_TOP10;
       status = S_BEREIT;
       istSettings = 0;
@@ -961,17 +955,18 @@ void loop() {
   }
 
   if ((status == S_LOESEN) && anzeigeLoesen > 0 && anzeigeLoesen <= jetzt) {
-    printzeit("Run      ", jetzt - startLoesen);
-    anzeigeLoesen = jetzt + AKTUALISIEREN;
+    printzeit("Run      ", 10 * (jetzt - startLoesen) / 10);
+    anzeigeLoesen +=  AKTUALISIEREN;
   }
   if (status == S_ZUSPAET && jetzt > endeAnschauen) {
     printStatus(S_BEREIT);
     status = S_BEREIT;
     endeAnschauen = 0;
   }
-  if (jetzt - lastzeit > 1000) {
+  /*
+    if (status==S_BEREIT && jetzt - lastzeit > 1000) {
     lastzeit = jetzt;
-    // showZeit();
-  }
-  //  */
+    showZeit(0,0);
+    }
+  */
 }
